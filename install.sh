@@ -65,7 +65,23 @@ else
     echo "Skipping Git aliases."
 fi
 
-# 5. Detect shell and set up PATH & Auto-completion
+# 5. Optional: Install Python Auto-Venv Tools
+echo -e "\n${YELLOW}Would you like to install the Python auto-venv tools (auto-activates .venv when you cd into a directory)?${NC}"
+read -p "(y/n) " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Installing auto-venv script..."
+    cp "$SCRIPT_DIR/auto-venv/auto-venv.sh" "$TOOLS_DIR/"
+    
+    # We will source this file in the shell config step below
+    INSTALL_AUTO_VENV=true
+    echo -e "${GREEN}✓ Auto-venv tools staged for installation!${NC}"
+else
+    INSTALL_AUTO_VENV=false
+    echo "Skipping Python auto-venv tools."
+fi
+
+# 6. Detect shell and set up PATH & Auto-completion
 SHELL_RC=""
 if [[ "$SHELL" == */zsh ]]; then
     SHELL_RC="$HOME/.zshrc"
@@ -104,6 +120,16 @@ if [ -n "$SHELL_RC" ]; then
         echo "source \"$TOOLS_DIR/git-wt-completion.sh\"" >> "$SHELL_RC"
     else
         echo -e "Auto-completion already configured in $(basename "$SHELL_RC")."
+    fi
+
+    # Setup Auto-Venv (if the user said yes)
+    if [ "$INSTALL_AUTO_VENV" = true ]; then
+        if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
+            echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
+            echo "source \"$TOOLS_DIR/auto-venv.sh\"" >> "$SHELL_RC"
+        else
+            echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."
+        fi
     fi
 else
     echo -e "\n${YELLOW}Warning: Could not detect bash or zsh configuration file.${NC}"
