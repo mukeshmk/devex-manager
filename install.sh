@@ -127,7 +127,7 @@ if [ -n "$SHELL_RC" ]; then
         if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
             echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
             echo "" >> "$SHELL_RC"
-            echo '# Added by DevEx Manager installer - auto-venv' >> "$SHELL_RC"
+            echo '# Added by DevEx Manager Installer - auto-venv' >> "$SHELL_RC"
             echo "source \"$TOOLS_DIR/auto-venv.sh\"" >> "$SHELL_RC"
         else
             echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."
