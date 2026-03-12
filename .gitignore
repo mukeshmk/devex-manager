@@ -1,0 +1,14 @@
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# IDE / editor config
+.vscode/
+.idea/
+
+# Local history
+.history/
