@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+# Usage: git wt-clone <url>
+
+set -e # Exit on error
+
+if [ -z "$1" ]; then
+    echo -e "\033[0;31mError: Git repository URL is required\033[0m"
+    echo "Usage: git wt-clone <url>"
+    exit 1
+fi
+
+URL="$1"
+# Extract the project name from the URL
+DIRNAME=$(basename -s .git "$URL")
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}Setting up bare clone for $DIRNAME...${NC}"
+
+mkdir -p "$DIRNAME"
+cd "$DIRNAME" || exit
+
+echo -e "${GREEN}[1/4] Cloning bare repository...${NC}"
+git clone "$URL" --bare .git
+
+echo -e "${GREEN}[2/4] Configuring remote fetch...${NC}"
+git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+
+echo -e "${GREEN}[3/4] Fetching origin...${NC}"
+git fetch origin
+
+echo -e "${GREEN}[4/4] Creating 'main' worktree...${NC}"
+git worktree add ./main
+
+echo -e "\n${BLUE}✓ Bare clone and worktree created successfully!${NC}"
