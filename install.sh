@@ -11,7 +11,7 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.local/bin"
 TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
 
-echo -e "${BLUE}Installing custom Git Worktree commands (git wt)...${NC}"
+echo -e "${BLUE}Installing DevEx Manager (git wt)...${NC}"
 
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
@@ -98,7 +98,7 @@ if [ -n "$SHELL_RC" ]; then
     if ! grep -q '.local/bin' "$SHELL_RC"; then
         echo -e "\n${YELLOW}Adding $INSTALL_DIR to your PATH in $(basename "$SHELL_RC")...${NC}"
         echo "" >> "$SHELL_RC"
-        echo '# Added by git-wt tools installer' >> "$SHELL_RC"
+        echo '# Added by DevEx Manager Installer' >> "$SHELL_RC"
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
     else
         echo -e "\nPATH already configured in $(basename "$SHELL_RC")."
@@ -109,7 +109,7 @@ if [ -n "$SHELL_RC" ]; then
         echo -e "${YELLOW}Adding auto-completion to $(basename "$SHELL_RC")...${NC}"
         
         echo "" >> "$SHELL_RC"
-        echo '# Added by git-wt tools installer - auto-completion' >> "$SHELL_RC"
+        echo '# Added by DevEx Manager Installer - auto-completion' >> "$SHELL_RC"
         
         # Zsh needs bashcompinit to run bash completion scripts properly
         if [[ "$SHELL" == */zsh ]]; then
@@ -126,6 +126,8 @@ if [ -n "$SHELL_RC" ]; then
     if [ "$INSTALL_AUTO_VENV" = true ]; then
         if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
             echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
+            echo "" >> "$SHELL_RC"
+            echo '# Added by DevEx Manager installer - auto-venv' >> "$SHELL_RC"
             echo "source \"$TOOLS_DIR/auto-venv.sh\"" >> "$SHELL_RC"
         else
             echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."

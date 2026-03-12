@@ -28,7 +28,7 @@ case "$COMMAND" in
         git worktree "$COMMAND" "$@"
         ;;
     *)
-        echo -e "${BLUE}Custom Git Worktree Manager (git wt)${NC}"
+        echo -e "${BLUE}DevEx Manager (git wt)${NC}"
         echo "Usage: git wt <command> [arguments]"
         echo ""
         echo "Available commands:"
