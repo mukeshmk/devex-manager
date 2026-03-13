@@ -78,23 +78,18 @@ if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
     cp "$SHELL_RC" "${SHELL_RC}.devex-backup"
     echo "  ✓ Created backup: ${SHELL_RC}.devex-backup"
     
-    # Remove DevEx Manager related lines
-    # This removes the comment lines and the actual configuration lines
-    sed -i.tmp '/# Added by DevEx Manager [Ii]nstaller/d' "$SHELL_RC"
-    sed -i.tmp '/export PATH=.*\.local\/bin.*PATH/d' "$SHELL_RC"
-    sed -i.tmp '/git-wt-completion\.sh/d' "$SHELL_RC"
-    sed -i.tmp '/auto-venv\.sh/d' "$SHELL_RC"
+    # Remove DevEx Manager related lines using unique markers
+    # Remove PATH section (including preceding empty line if present)
+    sed -i.tmp '/^$/{ N; /\n# >>> DevEx Manager PATH >>>/{ N; :a; /# <<< DevEx Manager PATH <<</!{ N; ba; }; d; }; P; D; }' "$SHELL_RC"
+    sed -i.tmp '/# >>> DevEx Manager PATH >>>/,/# <<< DevEx Manager PATH <<</d' "$SHELL_RC"
     
-    # For zsh-specific lines added by the installer
-    if [[ "$SHELL" == */zsh ]]; then
-        # Remove compinit and bashcompinit lines that were added by DevEx Manager
-        sed -i.tmp '/autoload -Uz compinit && compinit/d' "$SHELL_RC"
-        sed -i.tmp '/autoload -Uz bashcompinit && bashcompinit/d' "$SHELL_RC"
-    fi
+    # Remove Auto-completion section (including preceding empty line if present)
+    sed -i.tmp '/^$/{ N; /\n# >>> DevEx Manager Auto-completion >>>/{ N; :a; /# <<< DevEx Manager Auto-completion <<</!{ N; ba; }; d; }; P; D; }' "$SHELL_RC"
+    sed -i.tmp '/# >>> DevEx Manager Auto-completion >>>/,/# <<< DevEx Manager Auto-completion <<</d' "$SHELL_RC"
     
-    # Remove consecutive empty lines (collapse multiple blank lines into one)
-    awk 'NF {blank=0} !NF {blank++} blank < 2' "$SHELL_RC" > "${SHELL_RC}.cleaned"
-    mv "${SHELL_RC}.cleaned" "$SHELL_RC"
+    # Remove Auto-venv section (including preceding empty line if present)
+    sed -i.tmp '/^$/{ N; /\n# >>> DevEx Manager Auto-venv >>>/{ N; :a; /# <<< DevEx Manager Auto-venv <<</!{ N; ba; }; d; }; P; D; }' "$SHELL_RC"
+    sed -i.tmp '/# >>> DevEx Manager Auto-venv >>>/,/# <<< DevEx Manager Auto-venv <<</d' "$SHELL_RC"
     
     # Clean up the temporary file
     rm -f "${SHELL_RC}.tmp"

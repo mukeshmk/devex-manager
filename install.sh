@@ -98,8 +98,9 @@ if [ -n "$SHELL_RC" ]; then
     if ! grep -q '.local/bin' "$SHELL_RC"; then
         echo -e "\n${YELLOW}Adding $INSTALL_DIR to your PATH in $(basename "$SHELL_RC")...${NC}"
         echo "" >> "$SHELL_RC"
-        echo '# Added by DevEx Manager Installer' >> "$SHELL_RC"
+        echo '# >>> DevEx Manager PATH >>>' >> "$SHELL_RC"
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        echo '# <<< DevEx Manager PATH <<<' >> "$SHELL_RC"
     else
         echo -e "\nPATH already configured in $(basename "$SHELL_RC")."
     fi
@@ -109,7 +110,7 @@ if [ -n "$SHELL_RC" ]; then
         echo -e "${YELLOW}Adding auto-completion to $(basename "$SHELL_RC")...${NC}"
         
         echo "" >> "$SHELL_RC"
-        echo '# Added by DevEx Manager Installer - auto-completion' >> "$SHELL_RC"
+        echo '# >>> DevEx Manager Auto-completion >>>' >> "$SHELL_RC"
         
         # Zsh needs bashcompinit to run bash completion scripts properly
         if [[ "$SHELL" == */zsh ]]; then
@@ -118,6 +119,7 @@ if [ -n "$SHELL_RC" ]; then
         fi
         
         echo "source \"$TOOLS_DIR/git-wt-completion.sh\"" >> "$SHELL_RC"
+        echo '# <<< DevEx Manager Auto-completion <<<' >> "$SHELL_RC"
     else
         echo -e "Auto-completion already configured in $(basename "$SHELL_RC")."
     fi
@@ -127,8 +129,9 @@ if [ -n "$SHELL_RC" ]; then
         if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
             echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
             echo "" >> "$SHELL_RC"
-            echo '# Added by DevEx Manager Installer - auto-venv' >> "$SHELL_RC"
+            echo '# >>> DevEx Manager Auto-venv >>>' >> "$SHELL_RC"
             echo "source \"$TOOLS_DIR/auto-venv.sh\"" >> "$SHELL_RC"
+            echo '# <<< DevEx Manager Auto-venv <<<' >> "$SHELL_RC"
         else
             echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."
         fi
