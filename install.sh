@@ -27,6 +27,7 @@ echo "Copying sub-commands to $TOOLS_DIR..."
 cp "$SCRIPT_DIR/git-wt-tools/git-wt-clone" "$TOOLS_DIR/"
 cp "$SCRIPT_DIR/git-wt-tools/git-wt-add" "$TOOLS_DIR/"
 cp "$SCRIPT_DIR/git-wt-tools/git-wt-rm" "$TOOLS_DIR/"
+cp "$SCRIPT_DIR/git-wt-tools/devex-lib.sh" "$TOOLS_DIR/"
 
 echo "Copying completion script to $TOOLS_DIR..."
 cp "$SCRIPT_DIR/git-wt-completion.sh" "$TOOLS_DIR/"
@@ -34,6 +35,7 @@ cp "$SCRIPT_DIR/git-wt-completion.sh" "$TOOLS_DIR/"
 # 3. Make the scripts executable (completion script doesn't need to be executable, just sourced)
 chmod +x "$INSTALL_DIR/git-wt"
 chmod +x "$TOOLS_DIR"/git-wt-*
+chmod +x "$TOOLS_DIR/devex-lib.sh"
 
 # 4. Optional: Install Git Aliases
 echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g., 'git s' for status)?${NC}"
