@@ -4,12 +4,13 @@
 
 set -e  # Exit on error
 
+# Source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/devex-lib.sh"
+
 BRANCH_NAME="$1"
 BASE_BRANCH="${2:-main}"
-MAIN_WORKTREE_NAME="${3:-main}"
-
-# Extract the ticket number (e.g., JIRA-1234) to use as the folder name.
-WORKTREE_DIR_NAME=$(echo "$BRANCH_NAME" | cut -d'-' -f1,2)
+MAIN_WORKTREE_NAME="${3:-}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -49,6 +50,15 @@ else
     fi
 fi
 
+# Load config from repo root (sets DEVEX_* variables with defaults if no config)
+devex_load_config "$REPO_ROOT"
+
+# Apply config-based defaults (CLI args override config values)
+MAIN_WORKTREE_NAME="${MAIN_WORKTREE_NAME:-$DEVEX_MAIN_WORKTREE_NAME}"
+
+# Derive worktree directory name using configured naming strategy
+WORKTREE_DIR_NAME=$(devex_resolve_worktree_name "$BRANCH_NAME" "$DEVEX_NAMING_STRATEGY") || exit 1
+
 MAIN_WORKTREE="$REPO_ROOT/$MAIN_WORKTREE_NAME"
 NEW_WORKTREE="$REPO_ROOT/$WORKTREE_DIR_NAME"
 
@@ -69,17 +79,22 @@ else
     git worktree add -b "$BRANCH_NAME" "$NEW_WORKTREE" "$BASE_BRANCH"
 fi
 
-# Step 2: Copy directories from main to new worktree
-echo -e "${GREEN}[2/2] Copying configuration directories...${NC}"
+# Step 2: Symlink configuration directories from main to new worktree
+echo -e "${GREEN}[2/2] Symlinking configuration directories...${NC}"
 if [ -d "$MAIN_WORKTREE" ]; then
-    for dir in ".claude" ".kiro" ".vscode"; do
+    IFS=',' read -ra _dirs <<< "$DEVEX_SYMLINK_DIRS"
+    for dir in "${_dirs[@]}"; do
+        # Trim whitespace
+        dir="${dir#"${dir%%[![:space:]]*}"}"
+        dir="${dir%"${dir##*[![:space:]]}"}"
+        [ -z "$dir" ] && continue
         if [ -d "$MAIN_WORKTREE/$dir" ]; then
-            echo "  Copying $dir..."
-            cp -r "$MAIN_WORKTREE/$dir" "$NEW_WORKTREE/"
+            echo "  Symlinking $dir..."
+            ln -s "$MAIN_WORKTREE/$dir" "$NEW_WORKTREE/$dir"
         fi
     done
 else
-    echo -e "${YELLOW}  Warning: Main worktree '$MAIN_WORKTREE_NAME' not found, skipping directory copy${NC}"
+    echo -e "${YELLOW}  Warning: Main worktree '$MAIN_WORKTREE_NAME' not found, skipping symlink creation${NC}"
 fi
 
 echo -e "\n${BLUE}✓ Worktree ready!${NC}"
