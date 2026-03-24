@@ -36,7 +36,16 @@ devex_generate_config() {
 [symlinks]
 # Comma-separated list of files and directories to symlink from the main worktree
 # into each new worktree. Paths are relative to the worktree root.
+# Symlinked paths share the same underlying file — changes in one worktree
+# are reflected in all others.
 paths = .claude,.kiro,.vscode
+
+[copies]
+# Comma-separated list of files and directories to copy from the main worktree
+# into each new worktree. Paths are relative to the worktree root.
+# Copied paths are independent — each worktree gets its own copy that can
+# diverge from the original.
+paths =
 
 [worktree]
 # How to derive the worktree folder name from the branch name.

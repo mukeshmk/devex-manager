@@ -66,7 +66,7 @@ echo -e "${BLUE}Setting up worktree for branch: $BRANCH_NAME${NC}"
 echo -e "Folder name will be: $WORKTREE_DIR_NAME"
 
 # Step 1: Create or check out the worktree
-echo -e "${GREEN}[1/2] Configuring git worktree...${NC}"
+echo -e "${GREEN}[1/3] Configuring git worktree...${NC}"
 cd "$REPO_ROOT"
 
 # Check if the branch exists locally OR remotely
@@ -80,7 +80,7 @@ else
 fi
 
 # Step 2: Symlink configuration directories from main to new worktree
-echo -e "${GREEN}[2/2] Symlinking configuration directories...${NC}"
+echo -e "${GREEN}[2/3] Symlinking configuration directories...${NC}"
 if [ -d "$MAIN_WORKTREE" ]; then
     IFS=',' read -ra _paths <<< "$DEVEX_SYMLINK_PATHS"
     for p in "${_paths[@]}"; do
@@ -95,6 +95,26 @@ if [ -d "$MAIN_WORKTREE" ]; then
     done
 else
     echo -e "${YELLOW}  Warning: Main worktree '$MAIN_WORKTREE_NAME' not found, skipping symlink creation${NC}"
+fi
+
+# Step 3: Copy paths from main to new worktree
+echo -e "${GREEN}[3/3] Copying paths from main worktree...${NC}"
+if [ -d "$MAIN_WORKTREE" ] && [ -n "$DEVEX_COPY_PATHS" ]; then
+    IFS=',' read -ra _cpaths <<< "$DEVEX_COPY_PATHS"
+    for p in "${_cpaths[@]}"; do
+        # Trim whitespace
+        p="${p#"${p%%[![:space:]]*}"}"
+        p="${p%"${p##*[![:space:]]}"}"
+        [ -z "$p" ] && continue
+        if [ -e "$MAIN_WORKTREE/$p" ]; then
+            echo "  Copying $p..."
+            cp -R "$MAIN_WORKTREE/$p" "$NEW_WORKTREE/$p"
+        fi
+    done
+elif [ ! -d "$MAIN_WORKTREE" ] && [ -n "$DEVEX_COPY_PATHS" ]; then
+    echo -e "${YELLOW}  Warning: Main worktree '$MAIN_WORKTREE_NAME' not found, skipping copy${NC}"
+else
+    echo "  No copy paths configured, skipping."
 fi
 
 echo -e "\n${BLUE}✓ Worktree ready!${NC}"

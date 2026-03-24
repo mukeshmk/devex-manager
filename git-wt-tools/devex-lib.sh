@@ -7,6 +7,7 @@
 #
 # After calling devex_load_config, these variables are set:
 #   DEVEX_SYMLINK_PATHS      - comma-separated list of paths (files/dirs) to symlink
+#   DEVEX_COPY_PATHS         - comma-separated list of paths (files/dirs) to copy
 #   DEVEX_NAMING_STRATEGY    - "ticket-prefix" or "full-branch"
 #   DEVEX_MAIN_WORKTREE_NAME - name of the main worktree directory
 
@@ -16,6 +17,7 @@ devex_load_config() {
 
     # Defaults
     DEVEX_SYMLINK_PATHS=".claude,.kiro,.vscode"
+    DEVEX_COPY_PATHS=""
     DEVEX_NAMING_STRATEGY="ticket-prefix"
     DEVEX_MAIN_WORKTREE_NAME="main"
 
@@ -49,6 +51,7 @@ devex_load_config() {
 
             case "${current_section}.${key}" in
                 symlinks.paths)              DEVEX_SYMLINK_PATHS="$value" ;;
+                copies.paths)                DEVEX_COPY_PATHS="$value" ;;
                 worktree.naming_strategy)     DEVEX_NAMING_STRATEGY="$value" ;;
                 worktree.main_worktree_name)  DEVEX_MAIN_WORKTREE_NAME="$value" ;;
             esac

@@ -152,7 +152,16 @@ These commands are passed directly to `git worktree`, so you can use all the sam
 [symlinks]
 # Comma-separated list of files and directories to symlink from the main worktree
 # into each new worktree. Paths are relative to the worktree root.
+# Symlinked paths share the same underlying file — changes in one worktree
+# are reflected in all others.
 paths = .claude,.kiro,.vscode
+
+[copies]
+# Comma-separated list of files and directories to copy from the main worktree
+# into each new worktree. Paths are relative to the worktree root.
+# Copied paths are independent — each worktree gets its own copy that can
+# diverge from the original.
+paths =
 
 [worktree]
 # How to derive the worktree folder name from the branch name.
@@ -169,7 +178,8 @@ main_worktree_name = main
 
 | Section | Key | Default | Description |
 |---|---|---|---|
-| `[symlinks]` | `paths` | `.claude,.kiro,.vscode` | Comma-separated list of files and directories to symlink from the main worktree into new worktrees |
+| `[symlinks]` | `paths` | `.claude,.kiro,.vscode` | Comma-separated list of files and directories to symlink from the main worktree into new worktrees (shared — changes reflect everywhere) |
+| `[copies]` | `paths` | *(empty)* | Comma-separated list of files and directories to copy from the main worktree into new worktrees (independent — each worktree gets its own copy) |
 | `[worktree]` | `naming_strategy` | `ticket-prefix` | How to derive folder names from branch names |
 | `[worktree]` | `main_worktree_name` | `main` | Name of the primary worktree directory |
 
