@@ -11,8 +11,21 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
+REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
+
+# Detect if we are running from a local clone or remotely via curl
+# When piped to bash, BASH_SOURCE[0] is often empty or '-'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
+IS_REMOTE=false
+
+if [[ ! -f "$SCRIPT_DIR/install.sh" ]]; then
+    IS_REMOTE=true
+fi
 
 echo -e "${BLUE}Uninstalling DevEx Manager...${NC}"
+if [ "$IS_REMOTE" = true ]; then
+    echo -e "${BLUE}Mode: Remote uninstallation${NC}"
+fi
 
 # 1. Remove installed files
 echo -e "\n${YELLOW}Removing installed files...${NC}"
@@ -31,15 +44,16 @@ else
     echo "  - git-wt-tools directory not found"
 fi
 
-# 2. Get the directory where the uninstall script is currently located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# 3. Remove Git aliases
+# 2. Remove Git aliases
 echo -e "\n${YELLOW}Would you like to remove the Git aliases installed by DevEx Manager?${NC}"
 read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    bash "$SCRIPT_DIR/git-aliases/uninstall-git-aliases.sh"
+    if [ "$IS_REMOTE" = true ]; then
+        curl -fsSL "$REPO_RAW_URL/git-aliases/uninstall-git-aliases.sh" | bash
+    else
+        bash "$SCRIPT_DIR/git-aliases/uninstall-git-aliases.sh"
+    fi
 else
     echo "Skipping Git aliases removal."
 fi
