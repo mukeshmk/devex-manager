@@ -18,25 +18,56 @@ Git worktrees let you have multiple branches checked out simultaneously in separ
 
 ## Installation
 
+The quickest way to install DevEx Manager is via the remote installer. This will download the necessary scripts and configure your shell automatically.
+
+### Remote Installation (Recommended)
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mukeshmk/devex-manager/main/install.sh)"
+```
+
+### Local Installation
+
+If you prefer to audit the code first or have already cloned the repository:
+
 ```bash
 git clone https://github.com/mukeshmk/devex-manager.git
 cd devex-manager
 bash install.sh
 ```
 
-The installer:
-1. Copies `git-wt` and the sub-command scripts to `~/.local/bin/`
+### What the installer does:
+1. Downloads/Copies `git-wt` and the sub-command scripts to `~/.local/bin/`
 2. Makes all scripts executable
-3. Optionally installs a set of handy Git aliases via `git-aliases/install-git-aliases.sh` (see Optional Git Aliases section below)
-4. Optionally installs Python auto-venv tools via `auto-venv/auto-venv.sh` (see Python Auto-Venv section below)
+3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases)
+4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv)
 5. Sets up shell auto-completion for `git wt` commands
-6. Adds `~/.local/bin` to your `PATH` in `~/.zshrc` or `~/.bash_profile` / `~/.bashrc` (if not already present)
+6. Adds `~/.local/bin` to your `PATH` in `~/.zshrc` or `~/.bashrc`
 
-After installing, open a new terminal or run:
+After installing, open a new terminal or run `source ~/.zshrc` (or your respective shell config).
+
+## Uninstallation
+
+To completely remove DevEx Manager and its configurations:
+
+### Remote Uninstallation
 
 ```bash
-source ~/.zshrc   # or source ~/.bash_profile
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mukeshmk/devex-manager/main/uninstall.sh)"
 ```
+
+### Local Uninstallation
+
+```bash
+bash uninstall.sh
+```
+
+The uninstaller will:
+1. Remove all binaries from `~/.local/bin`
+2. Remove the `git-wt-tools` directory
+3. **Optional:** Prompts to remove the global Git aliases
+4. Clean up the `DevEx Manager` blocks from your shell configuration files (a backup is created as `~/.zshrc.devex-backup`)
+
 
 ## Commands
 

@@ -6,33 +6,63 @@ set -e # Exit on error
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
+REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
+
+# Detect if we are running from a local clone or remotely via curl
+# When piped to bash, BASH_SOURCE[0] is often empty or '-'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
+IS_REMOTE=false
+
+if [[ ! -f "$SCRIPT_DIR/git-wt" ]]; then
+    IS_REMOTE=true
+    # Check for curl if remote
+    if ! command -v curl &> /dev/null; then
+        echo -e "${RED}Error: 'curl' is required for remote installation.${NC}"
+        exit 1
+    fi
+fi
+
+fetch_file() {
+    local src_path="$1"
+    local dest_path="$2"
+
+    if [ "$IS_REMOTE" = true ]; then
+        curl -fsSL "$REPO_RAW_URL/$src_path" -o "$dest_path"
+    else
+        cp "$SCRIPT_DIR/$src_path" "$dest_path"
+    fi
+}
 
 echo -e "${BLUE}Installing DevEx Manager (git wt)...${NC}"
+if [ "$IS_REMOTE" = true ]; then
+    echo -e "${BLUE}Mode: Remote installation from GitHub${NC}"
+else
+    echo -e "${BLUE}Mode: Local installation${NC}"
+fi
 
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$TOOLS_DIR"
 
-# 2. Get the directory where the install script is currently located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 2. Copy executable files
+echo "Installing router to $INSTALL_DIR..."
+fetch_file "git-wt" "$INSTALL_DIR/git-wt"
 
-echo "Copying router to $INSTALL_DIR..."
-cp "$SCRIPT_DIR/git-wt" "$INSTALL_DIR/"
+echo "Installing sub-commands to $TOOLS_DIR..."
+fetch_file "git-wt-tools/git-wt-clone" "$TOOLS_DIR/git-wt-clone"
+fetch_file "git-wt-tools/git-wt-add" "$TOOLS_DIR/git-wt-add"
+fetch_file "git-wt-tools/git-wt-rm" "$TOOLS_DIR/git-wt-rm"
+fetch_file "git-wt-tools/devex-lib.sh" "$TOOLS_DIR/devex-lib.sh"
 
-echo "Copying sub-commands to $TOOLS_DIR..."
-cp "$SCRIPT_DIR/git-wt-tools/git-wt-clone" "$TOOLS_DIR/"
-cp "$SCRIPT_DIR/git-wt-tools/git-wt-add" "$TOOLS_DIR/"
-cp "$SCRIPT_DIR/git-wt-tools/git-wt-rm" "$TOOLS_DIR/"
-cp "$SCRIPT_DIR/git-wt-tools/devex-lib.sh" "$TOOLS_DIR/"
+echo "Installing completion script to $TOOLS_DIR..."
+fetch_file "git-wt-completion.sh" "$TOOLS_DIR/git-wt-completion.sh"
 
-echo "Copying completion script to $TOOLS_DIR..."
-cp "$SCRIPT_DIR/git-wt-completion.sh" "$TOOLS_DIR/"
-
-# 3. Make the scripts executable (completion script doesn't need to be executable, just sourced)
+# 3. Make the scripts executable
 chmod +x "$INSTALL_DIR/git-wt"
 chmod +x "$TOOLS_DIR"/git-wt-*
 chmod +x "$TOOLS_DIR/devex-lib.sh"
@@ -42,7 +72,11 @@ echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g
 read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    bash "$SCRIPT_DIR/git-aliases/install-git-aliases.sh"
+    if [ "$IS_REMOTE" = true ]; then
+        curl -fsSL "$REPO_RAW_URL/git-aliases/install-git-aliases.sh" | bash
+    else
+        bash "$SCRIPT_DIR/git-aliases/install-git-aliases.sh"
+    fi
 else
     echo "Skipping Git aliases."
 fi
@@ -53,9 +87,8 @@ read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing auto-venv script..."
-    cp "$SCRIPT_DIR/auto-venv/auto-venv.sh" "$TOOLS_DIR/"
+    fetch_file "auto-venv/auto-venv.sh" "$TOOLS_DIR/auto-venv.sh"
     
-    # We will source this file in the shell config step below
     INSTALL_AUTO_VENV=true
     echo -e "${GREEN}✓ Auto-venv tools staged for installation!${NC}"
 else
