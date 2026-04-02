@@ -39,7 +39,10 @@ venv() {
     if command -v uv &> /dev/null; then
         uv venv .venv
         source ".venv/bin/activate"
-        echo -e "\033[0;32m✓ Virtual environment created and activated using uv.\033[0m"
+        if [ -f "pyproject.toml" ]; then
+            uv sync
+        fi
+        echo -e "\033[0;32m✓ Virtual environment created, activated, and synced using uv.\033[0m"
     else
         echo -e "\033[0;31mError: 'uv' is not installed. Please install it first.\033[0m"
     fi

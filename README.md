@@ -266,7 +266,7 @@ cd ~
 # Create a new venv quickly (requires uv)
 cd new-project
 venv
-# → Creates .venv using uv and activates it
+# → Creates .venv using uv, syncs dependencies (if pyproject.toml exists), and activates it
 ```
 
 ### Requirements
