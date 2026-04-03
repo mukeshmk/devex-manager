@@ -57,6 +57,8 @@ echo "Installing sub-commands to $TOOLS_DIR..."
 fetch_file "git-wt-tools/git-wt-clone" "$TOOLS_DIR/git-wt-clone"
 fetch_file "git-wt-tools/git-wt-add" "$TOOLS_DIR/git-wt-add"
 fetch_file "git-wt-tools/git-wt-rm" "$TOOLS_DIR/git-wt-rm"
+fetch_file "git-wt-tools/git-wt-clean" "$TOOLS_DIR/git-wt-clean"
+fetch_file "git-wt-tools/git-wt-status" "$TOOLS_DIR/git-wt-status"
 fetch_file "git-wt-tools/devex-lib.sh" "$TOOLS_DIR/devex-lib.sh"
 
 echo "Installing completion script to $TOOLS_DIR..."

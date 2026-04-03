@@ -131,6 +131,26 @@ my-project/
 └── JIRA-1234/      # new worktree for the feature branch
 ```
 
+### `git wt clean`
+
+Interactively find and remove stale worktrees.
+
+```bash
+git wt clean
+```
+
+Identifies worktrees whose tracking branches have been merged into the base branch or whose remote branches have been deleted. Offers an interactive menu to safely clean them up.
+
+### `git wt status`
+
+Show a rich status overview of all active worktrees.
+
+```bash
+git wt status
+```
+
+Displays a formatted table showing each worktree's folder name, branch, count of uncommitted changes, and ahead/behind sync status relative to the tracking branch.
+
 ### `git wt rm <folder-name-or-branch-name>`
 
 Safely removes a worktree and deletes its local branch.
@@ -249,6 +269,7 @@ The installer optionally includes Python virtual environment automation that:
 - Searches up the directory tree to find `.venv/bin/activate`
 - Seamlessly switches between different project venvs
 - Works with any shell that supports bash-style functions
+- **Proactive Initialization:** When entering a directory containing `pyproject.toml` or `requirements.txt` but no `.venv`, the tool will proactively prompt you to initialize one using `uv`.
 
 ### Usage
 

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# git-wt-tools/git-wt-status
+#
+# Show a rich status overview of all active worktrees.
+# Usage: git wt status
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/devex-lib.sh"
+
+# Get worktree list
+worktree_list=$(git worktree list)
+
+if [ -z "$worktree_list" ]; then
+    echo -e "${YELLOW}No worktrees found.${NC}"
+    exit 0
+fi
+
+echo -e "${BOLD}${BLUE}Active Worktrees Status Overview${NC}"
+printf "${BOLD}%-20s %-20s %-20s %-20s${NC}\n" "Worktree" "Branch" "Changes" "Sync Status"
+echo "--------------------------------------------------------------------------------"
+
+while read -r line; do
+    path=$(echo "$line" | awk '{print $1}')
+    branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+    folder_name=$(basename "$path")
+    
+    # Skip bare repository entry
+    if [[ "$line" == *"(bare)"* ]]; then
+        continue
+    fi
+    
+    # If no branch (detached), use (detached)
+    if [ -z "$branch" ]; then
+        branch="(detached)"
+    fi
+    
+    # Check for uncommitted changes
+    # We must run this from the worktree directory
+    cd "$path" >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        changes_raw=$(git status --porcelain)
+        if [ -n "$changes_raw" ]; then
+            changes_count=$(echo "$changes_raw" | wc -l | xargs)
+            changes_status="${RED}${changes_count} files${NC}"
+        else
+            changes_status="${GREEN}Clean${NC}"
+        fi
+        
+        # Check ahead/behind status
+        if [ "$branch" != "(detached)" ]; then
+            # Get tracking branch
+            upstream=$(git rev-parse --abbrev-ref "$branch@{u}" 2>/dev/null)
+            if [ -n "$upstream" ]; then
+                counts=$(git rev-list --left-right --count "$branch...$upstream" 2>/dev/null)
+                ahead=$(echo "$counts" | awk '{print $1}')
+                behind=$(echo "$counts" | awk '{print $2}')
+                
+                if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
+                    sync_status="${YELLOW}↑${ahead} ↓${behind}${NC}"
+                elif [ "$ahead" -gt 0 ]; then
+                    sync_status="${BLUE}↑${ahead}${NC}"
+                elif [ "$behind" -gt 0 ]; then
+                    sync_status="${RED}↓${behind}${NC}"
+                else
+                    sync_status="${GREEN}Synced${NC}"
+                fi
+            else
+                sync_status="${YELLOW}No upstream${NC}"
+            fi
+        else
+            sync_status="N/A"
+        fi
+        cd - >/dev/null 2>&1
+    else
+        changes_status="${RED}Error (Path invalid)${NC}"
+        sync_status="N/A"
+    fi
+
+    printf "%-20s %-20s %-30b %-30b\n" "$folder_name" "$branch" "$changes_status" "$sync_status"
+done <<< "$worktree_list"

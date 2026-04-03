@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+
+# git-wt-tools/git-wt-clean
+#
+# Interactively find and remove stale worktrees (merged or with deleted remote branches).
+# Usage: git wt clean
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/devex-lib.sh"
+
+# Get worktree list
+worktree_list=$(git worktree list)
+
+if [ -z "$worktree_list" ]; then
+    echo -e "${YELLOW}No worktrees found.${NC}"
+    exit 0
+fi
+
+# Determine repo root for config loading
+_GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)" || true
+if [ -n "$_GIT_DIR" ]; then
+    _GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
+    _GIT_COMMON_DIR="$(cd "$_GIT_COMMON_DIR" && pwd)"
+    _REPO_ROOT="$_GIT_COMMON_DIR"
+    if [ "$(basename "$_REPO_ROOT")" = ".git" ]; then
+        _REPO_ROOT="$(dirname "$_REPO_ROOT")"
+    fi
+    devex_load_config "$_REPO_ROOT"
+fi
+
+# List of worktrees to potentially clean
+stale_worktrees=()
+stale_branches=()
+stale_paths=()
+
+# Determine the base branch (default to main)
+BASE_BRANCH="$DEVEX_BASE_BRANCH"
+
+echo -e "${BLUE}Scanning for stale worktrees...${NC}"
+
+# Get merged branches
+merged_branches=$(git branch --merged "$BASE_BRANCH" | sed 's/^[ *]*//')
+
+while read -r line; do
+    path=$(echo "$line" | awk '{print $1}')
+    branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+    
+    # Skip main worktree and base branch
+    if [ "$branch" == "$BASE_BRANCH" ]; then
+        continue
+    fi
+    
+    # Skip detached worktrees for now
+    if [ -z "$branch" ]; then
+        continue
+    fi
+    
+    is_stale=false
+    reason=""
+    
+    # Check if branch is merged
+    if echo "$merged_branches" | grep -qx "$branch"; then
+        is_stale=true
+        reason="Merged into $BASE_BRANCH"
+    else
+        # Check if remote branch is deleted
+        # Note: git ls-remote origin <branch> is a quick way to check if remote branch exists
+        remote_check=$(git ls-remote --heads origin "$branch")
+        if [ -z "$remote_check" ]; then
+            is_stale=true
+            reason="Remote branch deleted"
+        fi
+    fi
+    
+    if [ "$is_stale" = true ]; then
+        stale_worktrees+=("$branch ($reason at $path)")
+        stale_branches+=("$branch")
+        stale_paths+=("$path")
+    fi
+done <<< "$worktree_list"
+
+if [ ${#stale_worktrees[@]} -eq 0 ]; then
+    echo -e "${GREEN}✓ No stale worktrees found.${NC}"
+    exit 0
+fi
+
+echo -e "${YELLOW}Found the following stale worktrees:${NC}"
+for i in "${!stale_worktrees[@]}"; do
+    echo "  $((i+1))) ${stale_worktrees[$i]}"
+done
+
+echo -e "\n${RED}WARNING: This will permanently delete the worktree folder and the local branch.${NC}"
+read -p "Clean up these worktrees? (y/n/individual): " choice
+
+if [[ "$choice" =~ ^[Yy]$ ]]; then
+    # Clean all
+    for i in "${!stale_paths[@]}"; do
+        branch="${stale_branches[$i]}"
+        path="${stale_paths[$i]}"
+        
+        # Safety check: Prevent deleting the folder if you are currently inside it!
+        if [[ "$(pwd)" == "$path"* ]]; then
+            echo -e "${RED}Error: You are currently inside the worktree '$branch' ($path) you are trying to delete!${NC}"
+            echo -e "Please 'cd' into a different folder and try again."
+            continue
+        fi
+
+        echo -e "${BLUE}Removing worktree $branch...${NC}"
+        # Remove symlinks for configuration directories before removing the worktree
+        IFS=',' read -ra _paths <<< "$DEVEX_SYMLINK_PATHS"
+        for p in "${_paths[@]}"; do
+            p="${p#"${p%%[![:space:]]*}"}"
+            p="${p%"${p##*[![:space:]]}"}"
+            [ -z "$p" ] && continue
+            if [ -L "$path/$p" ]; then
+                echo "  Removing symlink $p..."
+                rm "$path/$p"
+            fi
+        done
+        git worktree remove --force "$path"
+        git branch -D "$branch"
+    done
+    echo -e "${GREEN}✓ Cleanup complete!${NC}"
+elif [[ "$choice" == "individual" ]]; then
+    # Individual selection
+    read -p "Enter numbers to clean (space-separated, e.g., 1 3): " -a targets
+    for t in "${targets[@]}"; do
+        i=$((t-1))
+        if [ -n "${stale_paths[$i]}" ]; then
+            branch="${stale_branches[$i]}"
+            path="${stale_paths[$i]}"
+
+            # Safety check: Prevent deleting the folder if you are currently inside it!
+            if [[ "$(pwd)" == "$path"* ]]; then
+                echo -e "${RED}Error: You are currently inside the worktree '$branch' ($path) you are trying to delete!${NC}"
+                echo -e "Please 'cd' into a different folder and try again."
+                continue
+            fi
+
+            echo -e "${BLUE}Removing worktree $branch...${NC}"
+            # Remove symlinks for configuration directories before removing the worktree
+            IFS=',' read -ra _paths <<< "$DEVEX_SYMLINK_PATHS"
+            for p in "${_paths[@]}"; do
+                p="${p#"${p%%[![:space:]]*}"}"
+                p="${p%"${p##*[![:space:]]}"}"
+                [ -z "$p" ] && continue
+                if [ -L "$path/$p" ]; then
+                    echo "  Removing symlink $p..."
+                    rm "$path/$p"
+                fi
+            done
+            git worktree remove --force "$path"
+            git branch -D "$branch"
+        fi
+    done
+    echo -e "${GREEN}✓ Selected cleanup complete!${NC}"
+else
+    echo "Cleanup cancelled."
+fi

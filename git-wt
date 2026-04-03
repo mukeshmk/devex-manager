@@ -22,6 +22,12 @@ case "$COMMAND" in
     rm)
         "$TOOLS_DIR/git-wt-rm" "$@"
         ;;
+    clean)
+        "$TOOLS_DIR/git-wt-clean" "$@"
+        ;;
+    status)
+        "$TOOLS_DIR/git-wt-status" "$@"
+        ;;
     # NATIVE GIT WORKTREE COMMANDS
     list|lock|move|prune|repair|unlock)
         # Passing these commands directly to the real git worktree
@@ -35,6 +41,8 @@ case "$COMMAND" in
         echo "  clone   - Clone a bare repo and set up the main worktree"
         echo "  add     - Create or checkout a worktree (uses branch prefix for folder)"
         echo "  rm      - Safely delete a worktree folder and its local branch"
+        echo "  clean   - Interactively find and remove stale worktrees"
+        echo "  status  - Show a rich status overview of all active worktrees"
         echo ""
         echo "Native Git Commands Pass-through:"
         echo "  list    - List details of each worktree"
