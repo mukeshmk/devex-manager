@@ -46,6 +46,47 @@ _auto_venv_check_init() {
     fi
 }
 
+_auto_stale_wt_check() {
+    # 1. Quick check for git
+    if ! command -v git &> /dev/null; then return; fi
+
+    # 2. Check if we are in a git worktree
+    local is_worktree=$(git rev-parse --is-inside-work-tree 2>/dev/null)
+    if [ "$is_worktree" != "true" ]; then return; fi
+
+    # 3. Check if we are in a worktree branch (and not main/bare)
+    local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    if [ -z "$branch" ] || [ "$branch" == "HEAD" ]; then return; fi
+
+    # 4. Resolve repo root to load config
+    local git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+    if [ -z "$git_common_dir" ]; then return; fi
+    local repo_root="$(cd "$git_common_dir/.." && pwd)"
+
+    # 5. Load config to get base branch
+    # Try to find devex-lib.sh relative to this script's directory (if installed)
+    # or just use a default 'main' if it fails
+    local base_branch="main"
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)"
+    if [ -f "$script_dir/devex-lib.sh" ]; then
+        # We need to be careful not to pollute current environment too much, 
+        # but devex_load_config is designed for this.
+        source "$script_dir/devex-lib.sh"
+        devex_load_config "$repo_root"
+        base_branch="$DEVEX_BASE_BRANCH"
+    fi
+
+    # Skip if we are already on the base branch
+    if [ "$branch" == "$base_branch" ]; then return; fi
+
+    # 6. Check if branch is merged into base branch
+    # Note: Use local check only for performance
+    if git branch --merged "$base_branch" | grep -qx "[ *]*$branch"; then
+        echo -e "\033[1;33m[DevEx] Branch '$branch' has been merged into '$base_branch'.\033[0m"
+        echo -e "\033[0;34m        Run 'git wt rm .' to clean up this worktree.\033[0m"
+    fi
+}
+
 _auto_venv_switch() {
     local new_venv="$(_auto_venv_find)"
     if [ -n "$VIRTUAL_ENV" ] && [ "$VIRTUAL_ENV" != "$new_venv" ]; then
@@ -64,6 +105,9 @@ _auto_venv_switch() {
 
     # After switching, check if we should prompt for init
     _auto_venv_check_init
+
+    # Check for stale worktree
+    _auto_stale_wt_check
 }
 
 # Override cd to automatically switch venvs
