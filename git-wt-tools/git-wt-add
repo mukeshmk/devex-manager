@@ -19,9 +19,34 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 if [ -z "$BRANCH_NAME" ]; then
-    echo -e "${RED}Error: Branch name is required${NC}"
-    echo "Usage: git wt-add <branch-name> [custom-folder-name]"
-    exit 1
+    if command -v fzf &> /dev/null; then
+        echo -e "${BLUE}No branch specified. Searching for remote branches...${NC}"
+        # Get list of remote branches (excluding the pointer like origin/HEAD -> origin/main)
+        # And filter out branches that already have a local worktree
+        active_branches=$(git worktree list | awk '{print $3}' | tr -d '[]')
+
+        # We use a temp file or process substitution to handle the filtering
+        # 1. Get remote branches (removing 'origin/')
+        # 2. Sort and unique them
+        # 3. Filter out active branches
+        BRANCH_NAME=$(git branch -r | grep -v "\->" | sed 's/^[[:space:]]*origin\///' | sort | uniq | \
+            while read -r rb; do
+                if ! echo "$active_branches" | grep -qx "$rb"; then
+                    echo "$rb"
+                fi
+            done | fzf --height 40% --reverse --header "Select a remote branch to create a worktree for:")
+
+        if [ -z "$BRANCH_NAME" ]; then
+            echo -e "${YELLOW}No branch selected. Exiting.${NC}"
+            exit 0
+        fi
+        echo -e "${BLUE}Selected branch: ${NC}$BRANCH_NAME"
+    else
+        echo -e "${RED}Error: Branch name is required${NC}"
+        echo "Usage: git wt-add <branch-name> [custom-folder-name]"
+        echo "Tip: Install 'fzf' for interactive branch selection."
+        exit 1
+    fi
 fi
 
 # Detect git repository root

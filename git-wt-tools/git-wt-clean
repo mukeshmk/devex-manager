@@ -54,7 +54,7 @@ while read -r line; do
     branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
     
     # Skip main worktree and base branch
-    if [ "$branch" == "$BASE_BRANCH" ]; then
+    if [ "$branch" = "$BASE_BRANCH" ]; then
         continue
     fi
     
@@ -72,11 +72,12 @@ while read -r line; do
         reason="Merged into $BASE_BRANCH"
     else
         # Check if remote branch is deleted
-        # Note: git ls-remote origin <branch> is a quick way to check if remote branch exists
-        remote_check=$(git ls-remote --heads origin "$branch")
+        # Try to find the remote for this branch, default to origin
+        remote_name=$(git config --get "branch.$branch.remote" || echo "origin")
+        remote_check=$(git ls-remote --heads "$remote_name" "$branch")
         if [ -z "$remote_check" ]; then
             is_stale=true
-            reason="Remote branch deleted"
+            reason="Remote branch deleted (on $remote_name)"
         fi
     fi
     

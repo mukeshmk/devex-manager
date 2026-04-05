@@ -46,8 +46,7 @@ while read -r line; do
     
     # Check for uncommitted changes
     # We must run this from the worktree directory
-    cd "$path" >/dev/null 2>&1
-    if [ $? -eq 0 ]; then
+    if cd "$path" >/dev/null 2>&1; then
         changes_raw=$(git status --porcelain)
         if [ -n "$changes_raw" ]; then
             changes_count=$(echo "$changes_raw" | wc -l | xargs)
