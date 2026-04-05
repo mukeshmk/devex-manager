@@ -4,7 +4,7 @@
 set -e
 
 COMMAND="$1"
-shift
+[ "$#" -gt 0 ] && shift
 
 # Locate tools relative to this script
 ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
