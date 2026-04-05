@@ -6,7 +6,7 @@ export _AUTO_VENV_PROMPTED_DIR=""
 
 _auto_venv_find() {
     local dir="$PWD"
-    while [ "$dir" != "/" ]; do
+    while [[ "$dir" != "/" && "$dir" != "." && -n "$dir" ]]; do
         if [ -e "$dir/.venv/bin/activate" ]; then
             echo "$dir/.venv"
             return
@@ -25,7 +25,7 @@ _auto_venv_check_init() {
         # Find project root (where manifest exists)
         local dir="$PWD"
         local project_root=""
-        while [ "$dir" != "/" ]; do
+        while [[ "$dir" != "/" && "$dir" != "." && -n "$dir" ]]; do
             if [ -f "$dir/pyproject.toml" ] || [ -f "$dir/requirements.txt" ]; then
                 project_root="$dir"
                 break
@@ -64,26 +64,27 @@ _auto_stale_wt_check() {
     local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
     if [ -z "$branch" ] || [ "$branch" = "HEAD" ]; then return; fi
 
-    # 4. Resolve repo root to load config
+    # 4. Resolve repo root to load config (optimization: use dirname instead of cd)
     local git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
     if [ -z "$git_common_dir" ]; then return; fi
-    local repo_root="$(builtin cd "$git_common_dir/.." && pwd)"
+    local repo_root="$(dirname "$git_common_dir")"
 
     # 5. Load config to get base branch
-    # Try to find devex-lib.sh relative to this script's directory (if installed)
-    # or just use a default 'main' if it fails
     local base_branch="main"
-    local script_dir=""
-    if [ -n "${BASH_VERSION:-}" ]; then
-        script_dir="$(builtin cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)"
-    elif [ -n "${ZSH_VERSION:-}" ]; then
-        script_dir="$(builtin cd "$(dirname "${(%):-%x}")" && pwd 2>/dev/null)"
+    if ! declare -f devex_load_config > /dev/null; then
+        local script_dir=""
+        if [ -n "${BASH_SOURCE[0]:-}" ]; then
+            script_dir="$(builtin cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
+        elif [ -n "${ZSH_VERSION:-}" ]; then
+            script_dir="$(builtin cd "$(dirname "${(%):-%x}")" && pwd 2>/dev/null || pwd)"
+        fi
+
+        if [ -n "$script_dir" ] && [ -f "$script_dir/devex-lib.sh" ]; then
+            source "$script_dir/devex-lib.sh"
+        fi
     fi
 
-    if [ -n "$script_dir" ] && [ -f "$script_dir/devex-lib.sh" ]; then
-        # We need to be careful not to pollute current environment too much, 
-        # but devex_load_config is designed for this.
-        source "$script_dir/devex-lib.sh"
+    if declare -f devex_load_config > /dev/null; then
         devex_load_config "$repo_root"
         base_branch="$DEVEX_BASE_BRANCH"
     fi
@@ -91,9 +92,8 @@ _auto_stale_wt_check() {
     # Skip if we are already on the base branch
     if [ "$branch" = "$base_branch" ]; then return; fi
 
-    # 6. Check if branch is merged into base branch
-    # Note: Use local check only for performance
-    if git branch --merged "$base_branch" | grep -qx "[ *]*$branch"; then
+    # 6. Check if branch is merged into base branch (MUCH faster check)
+    if git merge-base --is-ancestor "$branch" "$base_branch" 2>/dev/null; then
         echo -e "\033[1;33m[DevEx] Branch '$branch' has been merged into '$base_branch'.\033[0m"
         echo -e "\033[0;34m        Run 'git wt rm .' to clean up this worktree.\033[0m"
     fi
