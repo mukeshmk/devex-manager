@@ -14,7 +14,6 @@ TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
-# When piped to bash, BASH_SOURCE[0] is often empty or '-'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
 IS_REMOTE=false
 
@@ -58,7 +57,7 @@ else
     echo "Skipping Git aliases removal."
 fi
 
-# 4. Clean up shell configuration
+# 3. Clean up shell configuration
 SHELL_RC=""
 if [[ "$SHELL" == */zsh ]]; then
     SHELL_RC="$HOME/.zshrc"
@@ -77,16 +76,15 @@ if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
     cp "$SHELL_RC" "${SHELL_RC}.devex-backup"
     echo "  ✓ Created backup: ${SHELL_RC}.devex-backup"
     
-    # Remove DevEx Manager related lines using unique markers
-    # We use a simple range delete which is portable between BSD and GNU sed
+    # Remove DevEx Manager related lines using the block markers
+    # This removes the entire block in one go
+    sed -i.tmp '/# >>> DevEx Manager >>>/,/# <<< DevEx Manager <<</d' "$SHELL_RC"
+
+    # Also attempt to remove legacy markers if they exist
     sed -i.tmp '/# >>> DevEx Manager PATH >>>/,/# <<< DevEx Manager PATH <<</d' "$SHELL_RC"
     sed -i.tmp '/# >>> DevEx Manager Auto-completion >>>/,/# <<< DevEx Manager Auto-completion <<</d' "$SHELL_RC"
     sed -i.tmp '/# >>> DevEx Manager Auto-venv >>>/,/# <<< DevEx Manager Auto-venv <<</d' "$SHELL_RC"
     
-    # Remove any trailing triple-newlines that might have been left behind
-    # (Optional, but keeps the file clean)
-    # Note: On macOS, sed -i '' is the standard, but sed -i.tmp is also supported.
-
     # Clean up the temporary file
     rm -f "${SHELL_RC}.tmp"
     
@@ -97,7 +95,5 @@ else
 fi
 
 echo -e "\n${GREEN}✓ Uninstallation complete!${NC}"
-echo -e "\nTo complete the uninstallation:"
-echo -e "  1. Open a new terminal tab, or run: ${BLUE}source $SHELL_RC${NC}"
-echo -e "  2. Optionally remove the backup file: ${BLUE}rm ${SHELL_RC}.devex-backup${NC}"
-echo -e "\nNote: The PATH entry for ~/.local/bin was NOT removed as it may be used by other tools."
+echo -e "To complete the uninstallation, open a new terminal tab, or run:"
+echo -e "  ${BLUE}source $SHELL_RC${NC}"

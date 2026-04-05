@@ -27,6 +27,7 @@ if [[ ! -f "$SCRIPT_DIR/git-wt" ]]; then
     fi
 fi
 
+# Helper to fetch files (local or remote)
 fetch_file() {
     local src_path="$1"
     local dest_path="$2"
@@ -74,6 +75,7 @@ echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g
 read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Installing Git aliases..."
     if [ "$IS_REMOTE" = true ]; then
         curl -fsSL "$REPO_RAW_URL/git-aliases/install-git-aliases.sh" | bash
     else
@@ -90,7 +92,6 @@ echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing auto-venv script..."
     fetch_file "auto-venv/auto-venv.sh" "$TOOLS_DIR/auto-venv.sh"
-    
     INSTALL_AUTO_VENV=true
     echo -e "${GREEN}✓ Auto-venv tools staged for installation!${NC}"
 else
@@ -111,13 +112,30 @@ elif [[ "$SHELL" == */bash ]]; then
 fi
 
 if [ -n "$SHELL_RC" ]; then
-    # Setup PATH
-    if ! grep -q '.local/bin' "$SHELL_RC"; then
-        echo -e "\n${YELLOW}Adding $INSTALL_DIR to your PATH in $(basename "$SHELL_RC")...${NC}"
+    # Create the DevEx Manager block if it doesn't exist
+    if ! grep -q '# >>> DevEx Manager >>>' "$SHELL_RC"; then
+        echo -e "\n${BLUE}Initializing DevEx Manager block in $(basename "$SHELL_RC")...${NC}"
         echo "" >> "$SHELL_RC"
-        echo '# >>> DevEx Manager PATH >>>' >> "$SHELL_RC"
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-        echo '# <<< DevEx Manager PATH <<<' >> "$SHELL_RC"
+        echo '# >>> DevEx Manager >>>' >> "$SHELL_RC"
+        echo '# <<< DevEx Manager <<<' >> "$SHELL_RC"
+    fi
+
+    # Function to add a line inside the block if it's missing
+    add_to_devex_block() {
+        local line="$1"
+        if ! grep -Fq "$line" "$SHELL_RC"; then
+            # Insert before the closing marker using awk (portable on macOS/Darwin)
+            awk -v line="$line" '/# <<< DevEx Manager <<</ { print line } { print }' "$SHELL_RC" > "${SHELL_RC}.tmp" && \
+            mv "${SHELL_RC}.tmp" "$SHELL_RC"
+            return 0
+        fi
+        return 1
+    }
+
+    # Setup PATH
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && ! grep -q '.local/bin' "$SHELL_RC"; then
+        echo -e "\n${YELLOW}Adding $INSTALL_DIR to your PATH in $(basename "$SHELL_RC")...${NC}"
+        add_to_devex_block 'export PATH="$HOME/.local/bin:$PATH"'
     else
         echo -e "\nPATH already configured in $(basename "$SHELL_RC")."
     fi
@@ -126,17 +144,13 @@ if [ -n "$SHELL_RC" ]; then
     if ! grep -q "git-wt-completion.sh" "$SHELL_RC"; then
         echo -e "${YELLOW}Adding auto-completion to $(basename "$SHELL_RC")...${NC}"
         
-        echo "" >> "$SHELL_RC"
-        echo '# >>> DevEx Manager Auto-completion >>>' >> "$SHELL_RC"
-        
         # Zsh needs bashcompinit to run bash completion scripts properly
         if [[ "$SHELL" == */zsh ]]; then
-            echo 'autoload -Uz compinit && compinit' >> "$SHELL_RC"
-            echo 'autoload -Uz bashcompinit && bashcompinit' >> "$SHELL_RC"
+            add_to_devex_block 'autoload -Uz compinit && compinit'
+            add_to_devex_block 'autoload -Uz bashcompinit && bashcompinit'
         fi
         
-        echo "source \"$TOOLS_DIR/git-wt-completion.sh\"" >> "$SHELL_RC"
-        echo '# <<< DevEx Manager Auto-completion <<<' >> "$SHELL_RC"
+        add_to_devex_block "source \"$TOOLS_DIR/git-wt-completion.sh\""
     else
         echo -e "Auto-completion already configured in $(basename "$SHELL_RC")."
     fi
@@ -145,10 +159,7 @@ if [ -n "$SHELL_RC" ]; then
     if [ "$INSTALL_AUTO_VENV" = true ]; then
         if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
             echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
-            echo "" >> "$SHELL_RC"
-            echo '# >>> DevEx Manager Auto-venv >>>' >> "$SHELL_RC"
-            echo "source \"$TOOLS_DIR/auto-venv.sh\"" >> "$SHELL_RC"
-            echo '# <<< DevEx Manager Auto-venv <<<' >> "$SHELL_RC"
+            add_to_devex_block "source \"$TOOLS_DIR/auto-venv.sh\""
         else
             echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."
         fi
