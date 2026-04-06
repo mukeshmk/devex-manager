@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+# git-nb-list
+# Recursively discovers notebooks and reports their metadata.
+
+set -e
+
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Find all notebooks
+notebooks=$(find . -name "*.ipynb" -not -path "*/.*" 2>/dev/null)
+
+if [ -z "$notebooks" ]; then
+    echo -e "${YELLOW}No notebooks found in current directory.${NC}"
+    exit 0
+fi
+
+echo -e "${BOLD}${BLUE}Project Notebooks Status${NC}"
+printf "${BOLD}%-40s %-10s %-15s${NC}\n" "Notebook Path" "Size" "Status"
+echo "--------------------------------------------------------------------------------"
+
+while read -r nb; do
+    # Relative path (clean up ./)
+    nb_path="${nb#./}"
+    
+    # Get size
+    size=$(du -h "$nb" | awk '{print $1}')
+    
+    # Check if stripped (contains non-empty outputs)
+    # Simple check: if "outputs": [ followed by non-] 
+    # A bit hard with grep, let's use a simpler heuristic for now: 
+    # count non-empty output arrays
+    is_stripped="${GREEN}Stripped${NC}"
+    if grep -q '"outputs": \[.\+' "$nb"; then
+        is_stripped="${YELLOW}Has Output${NC}"
+    fi
+    
+    printf "%-40s %-10s %-15b\n" "$nb_path" "$size" "$is_stripped"
+done <<< "$notebooks"

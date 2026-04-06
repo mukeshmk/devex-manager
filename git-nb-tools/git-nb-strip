@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# git-nb-strip
+# Clears outputs and metadata from Jupyter Notebooks using nbconvert.
+
+set -e
+
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+if ! command -v jupyter &> /dev/null; then
+    echo -e "${RED}Error: 'jupyter' is not installed or not in PATH.${NC}" >&2
+    echo "Please install nbconvert (e.g., pip install nbconvert) to use this feature." >&2
+    exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "Usage: git nb strip <notebook1.ipynb> [notebook2.ipynb ...]"
+    echo "Example: git nb strip *.ipynb"
+    exit 1
+fi
+
+echo -e "${BLUE}Stripping output from $# notebook(s)...${NC}"
+jupyter nbconvert --clear-output --inplace "$@"
+echo -e "${GREEN}✓ Done.${NC}"

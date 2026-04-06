@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+# git-nb-kernel
+# Registers the current .venv as a Jupyter kernel using the worktree name.
+
+set -e
+
+BLUE='\033[0;34m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Check if .venv exists
+if [ ! -d ".venv" ]; then
+    echo -e "${RED}Error: No .venv found in the current directory.${NC}" >&2
+    exit 1
+fi
+
+# Determine the kernel name from the current folder
+KERNEL_NAME=$(basename "$PWD")
+
+# Resolve Python in the .venv
+VENV_PYTHON="./.venv/bin/python"
+if [ ! -f "$VENV_PYTHON" ]; then
+    VENV_PYTHON="python" # Fallback to path if not found (for some edge cases)
+fi
+
+echo -e "${BLUE}Registering kernel for worktree: $KERNEL_NAME...${NC}"
+
+# Check if ipykernel is installed in the venv
+if ! "$VENV_PYTHON" -m ipykernel --version &> /dev/null; then
+    echo -e "${RED}Error: 'ipykernel' is not installed in the .venv.${NC}" >&2
+    echo "Please install it (e.g., uv add ipykernel) and try again." >&2
+    exit 1
+fi
+
+"$VENV_PYTHON" -m ipykernel install --user --name "$KERNEL_NAME" --display-name "DevEx: $KERNEL_NAME"
+
+echo -e "${GREEN}✓ Kernel '$KERNEL_NAME' registered successfully.${NC}"
