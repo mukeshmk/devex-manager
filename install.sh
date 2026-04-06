@@ -10,7 +10,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
-TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
+WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
+NB_TOOLS_DIR="$INSTALL_DIR/git-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -39,7 +40,7 @@ fetch_file() {
     fi
 }
 
-echo -e "${BLUE}Installing DevEx Manager (git wt)...${NC}"
+echo -e "${BLUE}Installing DevEx Manager (git wt & nb)...${NC}"
 if [ "$IS_REMOTE" = true ]; then
     echo -e "${BLUE}Mode: Remote installation from GitHub${NC}"
 else
@@ -48,27 +49,38 @@ fi
 
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$TOOLS_DIR"
+mkdir -p "$WT_TOOLS_DIR"
+mkdir -p "$NB_TOOLS_DIR"
 
 # 2. Copy executable files
-echo "Installing router to $INSTALL_DIR..."
+echo "Installing routers to $INSTALL_DIR..."
 fetch_file "git-wt" "$INSTALL_DIR/git-wt"
+fetch_file "git-nb" "$INSTALL_DIR/git-nb"
 
-echo "Installing sub-commands to $TOOLS_DIR..."
-fetch_file "git-wt-tools/git-wt-clone" "$TOOLS_DIR/git-wt-clone"
-fetch_file "git-wt-tools/git-wt-add" "$TOOLS_DIR/git-wt-add"
-fetch_file "git-wt-tools/git-wt-rm" "$TOOLS_DIR/git-wt-rm"
-fetch_file "git-wt-tools/git-wt-clean" "$TOOLS_DIR/git-wt-clean"
-fetch_file "git-wt-tools/git-wt-status" "$TOOLS_DIR/git-wt-status"
-fetch_file "git-wt-tools/devex-lib.sh" "$TOOLS_DIR/devex-lib.sh"
+echo "Installing worktree sub-commands to $WT_TOOLS_DIR..."
+fetch_file "git-wt-tools/git-wt-clone" "$WT_TOOLS_DIR/git-wt-clone"
+fetch_file "git-wt-tools/git-wt-add" "$WT_TOOLS_DIR/git-wt-add"
+fetch_file "git-wt-tools/git-wt-rm" "$WT_TOOLS_DIR/git-wt-rm"
+fetch_file "git-wt-tools/git-wt-clean" "$WT_TOOLS_DIR/git-wt-clean"
+fetch_file "git-wt-tools/git-wt-status" "$WT_TOOLS_DIR/git-wt-status"
+fetch_file "git-wt-tools/devex-lib.sh" "$WT_TOOLS_DIR/devex-lib.sh"
 
-echo "Installing completion script to $TOOLS_DIR..."
-fetch_file "git-wt-completion.sh" "$TOOLS_DIR/git-wt-completion.sh"
+echo "Installing notebook sub-commands to $NB_TOOLS_DIR..."
+fetch_file "git-nb-tools/git-nb-strip" "$NB_TOOLS_DIR/git-nb-strip"
+fetch_file "git-nb-tools/git-nb-diff" "$NB_TOOLS_DIR/git-nb-diff"
+fetch_file "git-nb-tools/git-nb-kernel" "$NB_TOOLS_DIR/git-nb-kernel"
+fetch_file "git-nb-tools/git-nb-list" "$NB_TOOLS_DIR/git-nb-list"
+
+echo "Installing completion scripts to $WT_TOOLS_DIR..."
+fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
+fetch_file "git-nb-completion.sh" "$WT_TOOLS_DIR/git-nb-completion.sh"
 
 # 3. Make the scripts executable
 chmod +x "$INSTALL_DIR/git-wt"
-chmod +x "$TOOLS_DIR"/git-wt-*
-chmod +x "$TOOLS_DIR/devex-lib.sh"
+chmod +x "$INSTALL_DIR/git-nb"
+chmod +x "$WT_TOOLS_DIR"/git-wt-*
+chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
+chmod +x "$NB_TOOLS_DIR"/git-nb-*
 
 # 4. Optional: Install Git Aliases
 echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g., 'git s' for status)?${NC}"
@@ -91,7 +103,7 @@ read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing auto-venv script..."
-    fetch_file "auto-venv/auto-venv.sh" "$TOOLS_DIR/auto-venv.sh"
+    fetch_file "auto-venv/auto-venv.sh" "$WT_TOOLS_DIR/auto-venv.sh"
     INSTALL_AUTO_VENV=true
     echo -e "${GREEN}✓ Auto-venv tools staged for installation!${NC}"
 else
@@ -150,7 +162,8 @@ if [ -n "$SHELL_RC" ]; then
             add_to_devex_block 'autoload -Uz bashcompinit && bashcompinit'
         fi
         
-        add_to_devex_block "source \"$TOOLS_DIR/git-wt-completion.sh\""
+        add_to_devex_block "source \"$WT_TOOLS_DIR/git-wt-completion.sh\""
+        add_to_devex_block "source \"$WT_TOOLS_DIR/git-nb-completion.sh\""
     else
         echo -e "Auto-completion already configured in $(basename "$SHELL_RC")."
     fi
@@ -159,7 +172,7 @@ if [ -n "$SHELL_RC" ]; then
     if [ "$INSTALL_AUTO_VENV" = true ]; then
         if ! grep -q "auto-venv.sh" "$SHELL_RC"; then
             echo -e "${YELLOW}Adding auto-venv to $(basename "$SHELL_RC")...${NC}"
-            add_to_devex_block "source \"$TOOLS_DIR/auto-venv.sh\""
+            add_to_devex_block "source \"$WT_TOOLS_DIR/auto-venv.sh\""
         else
             echo -e "Auto-venv already configured in $(basename "$SHELL_RC")."
         fi
