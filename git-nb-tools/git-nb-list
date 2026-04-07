@@ -5,11 +5,19 @@
 
 set -e
 
+# Colors
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+# Check if jq is available
+HAS_JQ=false
+if command -v jq &>/dev/null; then
+    HAS_JQ=true
+fi
 
 # Find all notebooks
 notebooks=$(find . -name "*.ipynb" -not -path "*/.*" 2>/dev/null)
@@ -19,24 +27,89 @@ if [ -z "$notebooks" ]; then
     exit 0
 fi
 
+get_last_modified() {
+    local nb="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$nb" 2>/dev/null || echo "Unknown"
+    else
+        stat -c %y "$nb" 2>/dev/null | cut -d: -f1,2 || echo "Unknown"
+    fi
+}
+
 echo -e "${BOLD}${BLUE}Project Notebooks Status${NC}"
-printf "${BOLD}%-40s %-10s %-15s${NC}\n" "Notebook Path" "Size" "Status"
-echo "--------------------------------------------------------------------------------"
+printf "${BOLD}%-40s %-8s %-12s %-12s %-16s${NC}\n" "Notebook Path" "Size" "Cells(C/M)" "Status" "Last Modified"
+echo "------------------------------------------------------------------------------------------------"
+
+total_notebooks=0
+total_cells=0
+total_code=0
+total_markdown=0
+dirty_count=0
+stripped_count=0
 
 while read -r nb; do
+    ((total_notebooks++))
+
     # Relative path (clean up ./)
     nb_path="${nb#./}"
     
     # Get size
     size=$(du -h "$nb" | awk '{print $1}')
-    
-    # Check if stripped (contains non-empty outputs)
-    # Simple check: if "output_type" exists, it has output cells.
-    # Stripped notebooks (nbconvert or nbstripout) will have empty outputs lists.
-    is_stripped="${GREEN}Stripped${NC}"
-    if grep -q '"output_type":' "$nb"; then
-        is_stripped="${YELLOW}Has Output${NC}"
+
+    # Get last modified
+    last_mod=$(get_last_modified "$nb")
+
+    # Default values
+    cells="?"
+    status="${YELLOW}Unknown${NC}"
+
+    if [ "$HAS_JQ" = true ]; then
+        # Extract metadata with jq
+        # Returns: total code markdown has_output
+        metadata=$(jq -r '.cells | {
+            total: length,
+            code: ([.[] | select(.cell_type == "code")] | length),
+            markdown: ([.[] | select(.cell_type == "markdown")] | length),
+            has_output: ([.[] | .outputs? // [] | length] | add > 0)
+        } | [.total, .code, .markdown, .has_output] | @tsv' "$nb" 2>/dev/null || echo "err")
+
+        if [ "$metadata" != "err" ]; then
+            read -r total code markdown has_output <<< "$metadata"
+
+            cells="${total} (${code}/${markdown})"
+            ((total_cells += total))
+            ((total_code += code))
+            ((total_markdown += markdown))
+
+            if [ "$has_output" = "true" ]; then
+                status="${YELLOW}● Dirty${NC}   "
+                ((dirty_count++))
+            else
+                status="${GREEN}○ Stripped${NC}"
+                ((stripped_count++))
+            fi
+        else
+            status="${RED}Error (JSON)${NC}"
+        fi
+    else
+        # Fallback to grep if jq is not available
+        if grep -q '"output_type":' "$nb"; then
+            status="${YELLOW}● Dirty${NC}   "
+            ((dirty_count++))
+        else
+            status="${GREEN}○ Stripped${NC}"
+            ((stripped_count++))
+        fi
+        cells="N/A"
     fi
-    
-    printf "%-40s %-10s %-15b\n" "$nb_path" "$size" "$is_stripped"
+
+    printf "%-40s %-8s %-12s %b %-16s\n" "$nb_path" "$size" "$cells" "$status" "$last_mod"
 done <<< "$notebooks"
+
+echo "------------------------------------------------------------------------------------------------"
+echo -e "${BOLD}Summary:${NC}"
+echo -e "  Total Notebooks: ${BOLD}${total_notebooks}${NC}"
+if [ "$HAS_JQ" = true ]; then
+    echo -e "  Total Cells:     ${BOLD}${total_cells}${NC} (${total_code} Code, ${total_markdown} Markdown)"
+fi
+echo -e "  Status:          ${GREEN}${stripped_count} Stripped${NC}, ${YELLOW}${dirty_count} Dirty${NC}"

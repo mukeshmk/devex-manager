@@ -21,8 +21,16 @@ case "$COMMAND" in
     status) "$TOOLS_DIR/git-wt-status" "$@" ;;
 
     # Pass-through to native git worktree
-    list|lock|move|prune|repair|unlock)
+    lock|move|prune|repair|unlock)
         git worktree "$COMMAND" "$@"
+        ;;
+
+    list)
+        if [ "$#" -eq 0 ]; then
+            "$TOOLS_DIR/git-wt-status" "$@"
+        else
+            git worktree list "$@"
+        fi
         ;;
 
     *)
@@ -34,10 +42,10 @@ case "$COMMAND" in
         echo "  add     - Create/checkout worktree (by branch prefix)"
         echo "  rm      - Delete worktree folder & local branch"
         echo "  clean   - Interactively remove stale worktrees"
-        echo "  status  - Rich status overview"
+        echo "  status  - Rich status overview (alias: list)"
         echo ""
         echo "Native Git Commands Pass-through:"
-        echo "  list, lock, move, prune, repair, unlock"
+        echo "  lock, move, prune, repair, unlock"
         exit 1
         ;;
 esac

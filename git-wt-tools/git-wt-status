@@ -17,6 +17,15 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/devex-lib.sh"
 
+get_last_modified() {
+    local path="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$path" 2>/dev/null || echo "Unknown"
+    else
+        stat -c %y "$path" 2>/dev/null | cut -d: -f1,2 || echo "Unknown"
+    fi
+}
+
 # Get worktree list
 worktree_list=$(git worktree list)
 
@@ -26,35 +35,47 @@ if [ -z "$worktree_list" ]; then
 fi
 
 echo -e "${BOLD}${BLUE}Active Worktrees Status Overview${NC}"
-printf "${BOLD}%-20s %-20s %-20s %-20s${NC}\n" "Worktree" "Branch" "Changes" "Sync Status"
-echo "--------------------------------------------------------------------------------"
+printf "${BOLD}%-15s %-20s %-12s %-18s %-16s${NC}\n" "Worktree" "Branch" "Status" "Sync Status" "Last Modified"
+echo "------------------------------------------------------------------------------------------------"
+
+total_wt=0
+clean_count=0
+dirty_count=0
+synced_count=0
+pending_count=0
 
 while read -r line; do
     path=$(echo "$line" | awk '{print $1}')
     branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
     folder_name=$(basename "$path")
-    
+
     # Skip bare repository entry
     if [[ "$line" == *"(bare)"* ]]; then
         continue
     fi
-    
+
+    ((total_wt++))
+
     # If no branch (detached), use (detached)
     if [ -z "$branch" ]; then
         branch="(detached)"
     fi
-    
+
+    last_mod=$(get_last_modified "$path")
+
     # Check for uncommitted changes
     # We must run this from the worktree directory
     if cd "$path" >/dev/null 2>&1; then
         changes_raw=$(git status --porcelain)
         if [ -n "$changes_raw" ]; then
             changes_count=$(echo "$changes_raw" | wc -l | xargs)
-            changes_status="${RED}${changes_count} files${NC}"
+            changes_status="${RED}● ${changes_count} files${NC}"
+            ((dirty_count++))
         else
-            changes_status="${GREEN}Clean${NC}"
+            changes_status="${GREEN}○ Clean${NC}"
+            ((clean_count++))
         fi
-        
+
         # Check ahead/behind status
         if [ "$branch" != "(detached)" ]; then
             # Get tracking branch
@@ -63,15 +84,19 @@ while read -r line; do
                 counts=$(git rev-list --left-right --count "$branch...$upstream" 2>/dev/null)
                 ahead=$(echo "$counts" | awk '{print $1}')
                 behind=$(echo "$counts" | awk '{print $2}')
-                
+
                 if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
                     sync_status="${YELLOW}↑${ahead} ↓${behind}${NC}"
+                    ((pending_count++))
                 elif [ "$ahead" -gt 0 ]; then
                     sync_status="${BLUE}↑${ahead}${NC}"
+                    ((pending_count++))
                 elif [ "$behind" -gt 0 ]; then
                     sync_status="${RED}↓${behind}${NC}"
+                    ((pending_count++))
                 else
                     sync_status="${GREEN}Synced${NC}"
+                    ((synced_count++))
                 fi
             else
                 sync_status="${YELLOW}No upstream${NC}"
@@ -81,9 +106,15 @@ while read -r line; do
         fi
         cd - >/dev/null 2>&1
     else
-        changes_status="${RED}Error (Path invalid)${NC}"
+        changes_status="${RED}Error${NC}"
         sync_status="N/A"
     fi
 
-    printf "%-20s %-20s %-30b %-30b\n" "$folder_name" "$branch" "$changes_status" "$sync_status"
+    printf "%-15s %-20s %-21b %-27b %-16s\n" "$folder_name" "$branch" "$changes_status" "$sync_status" "$last_mod"
 done <<< "$worktree_list"
+
+echo "------------------------------------------------------------------------------------------------"
+echo -e "${BOLD}Summary:${NC}"
+echo -e "  Total Worktrees: ${BOLD}${total_wt}${NC}"
+echo -e "  Changes:         ${GREEN}${clean_count} Clean${NC}, ${RED}${dirty_count} Dirty${NC}"
+echo -e "  Sync:            ${GREEN}${synced_count} Synced${NC}, ${YELLOW}${pending_count} Pending${NC}"
