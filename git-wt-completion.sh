@@ -4,6 +4,6 @@
 # Git completion looks for functions named _git_<subcommand>
 
 _git_wt() {
-    local subcommands="clone add clean list lock move prune repair unlock status"
+    local subcommands="clone add rm clean list lock move prune repair unlock status"
     COMPREPLY=( $(compgen -W "$subcommands" -- "${COMP_WORDS[COMP_CWORD]}") )
 }

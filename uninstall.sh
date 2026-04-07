@@ -95,12 +95,8 @@ if [ -n "$SHELL_RC" ] && [ -f "$SHELL_RC" ]; then
     # This removes the entire block in one go
     sed -i.tmp '/# >>> DevEx Manager >>>/,/# <<< DevEx Manager <<</d' "$SHELL_RC"
 
-    # Also attempt to remove legacy markers if they exist
-    sed -i.tmp '/# >>> DevEx Manager PATH >>>/,/# <<< DevEx Manager PATH <<</d' "$SHELL_RC"
-    sed -i.tmp '/# >>> DevEx Manager Auto-completion >>>/,/# <<< DevEx Manager Auto-completion <<</d' "$SHELL_RC"
-    sed -i.tmp '/# >>> DevEx Manager Auto-venv >>>/,/# <<< DevEx Manager Auto-venv <<</d' "$SHELL_RC"
-    
     # Clean up the temporary file
+
     rm -f "${SHELL_RC}.tmp"
     
     echo -e "${GREEN}✓ Shell configuration cleaned${NC}"
