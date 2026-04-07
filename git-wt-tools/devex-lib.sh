@@ -36,15 +36,16 @@ devex_load_config() {
         [[ -z "$line" || "$line" == \#* ]] && continue
 
         # Section header
-        if [[ "$line" =~ ^\[([a-zA-Z_]+)\]$ ]]; then
-            current_section="${BASH_REMATCH[1]}"
+        if [[ "$line" == \[*\] ]]; then
+            current_section="${line#\[}"
+            current_section="${current_section%\]}"
             continue
         fi
 
         # Key = value
-        if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
+        if [[ "$line" == *=* ]]; then
+            local key="${line%%=*}"
+            local value="${line#*=}"
             # Trim whitespace from key and value
             key="${key#"${key%%[![:space:]]*}"}"
             key="${key%"${key##*[![:space:]]}"}"

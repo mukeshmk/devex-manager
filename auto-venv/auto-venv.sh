@@ -35,15 +35,25 @@ _auto_venv_check_init() {
 
         # If project root found and we haven't prompted for THIS project root in this session
         if [ -n "$project_root" ] && [ "$_AUTO_VENV_PROMPTED_DIR" != "$project_root" ]; then
+            # Mark as prompted BEFORE taking action to prevent recursion/loops
+            export _AUTO_VENV_PROMPTED_DIR="$project_root"
+
             if command -v uv &> /dev/null; then
                 echo -e "\033[0;34mPython project detected at $project_root. Would you like to initialize a .venv using uv? (y/n)\033[0m"
-                read -p "> " -n 1 -r
+                printf "> "
+                if [ -n "$ZSH_VERSION" ]; then
+                    read -k 1 -r
+                else
+                    read -n 1 -r
+                fi
                 echo ""
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    # Navigate to project root to run venv
-                    (builtin cd "$project_root" && venv)
+                    # Navigate to project root to run venv (not in a subshell to allow activation)
+                    local current_dir="$PWD"
+                    builtin cd "$project_root"
+                    venv
+                    builtin cd "$current_dir"
                 fi
-                export _AUTO_VENV_PROMPTED_DIR="$project_root"
             fi
         fi
     fi
