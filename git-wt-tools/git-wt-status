@@ -35,14 +35,28 @@ if [ -z "$worktree_list" ]; then
 fi
 
 echo -e "${BOLD}${BLUE}Active Worktrees Status Overview${NC}"
-printf "${BOLD}%-15s %-20s %-12s %-18s %-16s${NC}\n" "Worktree" "Branch" "Status" "Sync Status" "Last Modified"
-echo "------------------------------------------------------------------------------------------------"
+printf "${BOLD}%-15s %-35s %-12s %-16s %-10s %-16s${NC}\n" "Worktree" "Branch" "Status" "Sync" "Merged" "Last Modified"
+echo "-------------------------------------------------------------------------------------------------------------"
+
+# Determine base branch and get merged branches
+_GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)" || true
+if [ -n "$_GIT_DIR" ]; then
+    _GIT_COMMON_DIR="$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" && pwd)"
+    _REPO_ROOT="$_GIT_COMMON_DIR"
+    if [ "$(basename "$_REPO_ROOT")" = ".git" ]; then
+        _REPO_ROOT="$(dirname "$_REPO_ROOT")"
+    fi
+    devex_load_config "$_REPO_ROOT"
+fi
+BASE_BRANCH="$DEVEX_BASE_BRANCH"
+merged_branches=$(git branch --merged "$BASE_BRANCH" | sed 's/^[* +]*//')
 
 total_wt=0
 clean_count=0
 dirty_count=0
 synced_count=0
 pending_count=0
+merged_count=0
 
 while read -r line; do
     path=$(echo "$line" | awk '{print $1}')
@@ -110,11 +124,22 @@ while read -r line; do
         sync_status="N/A"
     fi
 
-    printf "%-15s %-20s %-21b %-27b %-16s\n" "$folder_name" "$branch" "$changes_status" "$sync_status" "$last_mod"
+    # Check if branch is merged into base
+    if [ "$branch" != "(detached)" ] && [ "$branch" != "$BASE_BRANCH" ] && echo "$merged_branches" | grep -qx "$branch"; then
+        merged_status="${YELLOW}Yes${NC}"
+        ((merged_count++))
+    else
+        merged_status="${GREEN}No${NC}"
+    fi
+
+    printf "%-15s %-35s %-23b %-27b %-21b %-16s\n" "$folder_name" "$branch" "$changes_status" "$sync_status" "$merged_status" "$last_mod"
 done <<< "$worktree_list"
 
-echo "------------------------------------------------------------------------------------------------"
+echo "-------------------------------------------------------------------------------------------------------------"
 echo -e "${BOLD}Summary:${NC}"
 echo -e "  Total Worktrees: ${BOLD}${total_wt}${NC}"
 echo -e "  Changes:         ${GREEN}${clean_count} Clean${NC}, ${RED}${dirty_count} Dirty${NC}"
 echo -e "  Sync:            ${GREEN}${synced_count} Synced${NC}, ${YELLOW}${pending_count} Pending${NC}"
+if [ "$merged_count" -gt 0 ]; then
+    echo -e "  Stale:           ${YELLOW}${merged_count} Merged${NC} (clean up with ${BOLD}git wt clean${NC})"
+fi

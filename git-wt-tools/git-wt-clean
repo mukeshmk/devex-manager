@@ -47,7 +47,7 @@ BASE_BRANCH="$DEVEX_BASE_BRANCH"
 echo -e "${BLUE}Scanning for stale worktrees...${NC}"
 
 # Get merged branches
-merged_branches=$(git branch --merged "$BASE_BRANCH" | sed 's/^[ *]*//')
+merged_branches=$(git branch --merged "$BASE_BRANCH" | sed 's/^[* +]*//')
 
 while read -r line; do
     path=$(echo "$line" | awk '{print $1}')
