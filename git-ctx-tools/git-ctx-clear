@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+# git-ctx-clear: Purge completed todo items
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+temp_file=$(mktemp)
+in_todos=false
+current_line=0
+cleared_count=0
+
+heading_pattern='^##?[[:space:]]+'
+todos_heading_pattern='^##[[:space:]]+[Tt][Oo][Dd][Oo][Ss]'
+done_pattern='^[[:space:]]*- \[[xX]\]'
+
+todos_line_num=$(grep -n -E '^##[[:space:]]+[Tt][Oo][Dd][Oo][Ss]' "$ctx_file" | cut -d: -f1)
+if [ -z "$todos_line_num" ]; then
+    rm "$temp_file"
+    echo -e "${YELLOW}No todos section found.${NC}"
+    exit 0
+fi
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    ((current_line++))
+    
+    if [[ "$line" =~ $heading_pattern ]]; then
+        if [[ "$line" =~ $todos_heading_pattern ]]; then
+            in_todos=true
+        else
+            in_todos=false
+        fi
+    fi
+    
+    if [ "$in_todos" = true ] && [[ "$line" =~ $done_pattern ]]; then
+        ((cleared_count++))
+        continue
+    fi
+    
+    echo "$line" >> "$temp_file"
+done < "$ctx_file"
+mv "$temp_file" "$ctx_file"
+echo -e "${GREEN}✓ Cleared $cleared_count completed tasks.${NC}"

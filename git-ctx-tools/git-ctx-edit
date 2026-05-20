@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# git-ctx-edit: Open context file in default editor
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+editor="${EDITOR:-}"
+if [ -z "$editor" ]; then
+    if command -v nano &>/dev/null; then
+        editor="nano"
+    elif command -v vim &>/dev/null; then
+        editor="vim"
+    elif command -v vi &>/dev/null; then
+        editor="vi"
+    else
+        echo -e "${RED}Error: No text editor found. Please set \$EDITOR environment variable.${NC}"
+        exit 1
+    fi
+fi
+$editor "$ctx_file"

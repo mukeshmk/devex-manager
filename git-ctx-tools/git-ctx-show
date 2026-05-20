@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+# git-ctx-show: Show notes and checklist for current branch
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+echo -e "${BOLD}${BLUE}Context: ${branch_name}${NC}"
+echo ""
+
+in_todos=false
+in_notes=false
+todo_count=0
+index=0
+
+# Store regex patterns in variables to avoid syntax errors
+heading_pattern='^##?[[:space:]]+'
+todos_heading_pattern='^##[[:space:]]+[Tt][Oo][Dd][Oo][Ss]'
+notes_heading_pattern='^##[[:space:]]+[Nn][Oo][Tt][Ee][Ss]'
+todo_pattern='^[[:space:]]*- \[[ xX]\][[:space:]]+(.*)'
+done_pattern='^[[:space:]]*- \[[xX]\]'
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $heading_pattern ]]; then
+        if [[ "$line" =~ $todos_heading_pattern ]]; then
+            in_todos=true
+            in_notes=false
+            echo -e "${BOLD}Todos:${NC}"
+            continue
+        elif [[ "$line" =~ $notes_heading_pattern ]]; then
+            in_todos=false
+            in_notes=true
+            echo -e "\n${BOLD}Notes:${NC}"
+            continue
+        else
+            in_todos=false
+            in_notes=false
+            continue
+        fi
+    fi
+    
+    if [ "$in_todos" = true ]; then
+        if [[ "$line" =~ $todo_pattern ]]; then
+            ((index++))
+            ((todo_count++))
+            task_text="${BASH_REMATCH[1]}"
+            if [[ "$line" =~ $done_pattern ]]; then
+                echo -e "  ${GREEN}[$index] [✓] $task_text${NC}"
+            else
+                echo -e "  ${YELLOW}[$index] [ ] $task_text${NC}"
+            fi
+        fi
+    elif [ "$in_notes" = true ]; then
+        echo -e "  $line"
+    fi
+done < "$ctx_file"
+
+if [ $todo_count -eq 0 ]; then
+    echo -e "  ${YELLOW}No tasks. Add one with 'git ctx todo add <task>'${NC}"
+fi

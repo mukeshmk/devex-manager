@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+# git-ctx-add: Add a todo item
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+task="$*"
+if [ -z "$task" ]; then
+    echo -e "${RED}Error: Task description cannot be empty.${NC}"
+    exit 1
+fi
+
+# Locate or append ## Todos section
+todos_line_num=$(grep -n -E '^##[[:space:]]+[Tt][Oo][Dd][Oo][Ss]' "$ctx_file" | cut -d: -f1)
+if [ -z "$todos_line_num" ]; then
+    echo -e "\n## Todos" >> "$ctx_file"
+    todos_line_num=$(wc -l < "$ctx_file" | xargs)
+fi
+
+# Find last todo item line number after todos heading
+last_todo_line=$todos_line_num
+current_line=0
+in_todos=false
+
+# Store regex patterns in variables to avoid syntax errors
+heading_pattern='^##?[[:space:]]+'
+todo_marker='^[[:space:]]*- \[[ xX]\]'
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+    ((current_line++))
+    if [ $current_line -eq $todos_line_num ]; then
+        in_todos=true
+        continue
+    fi
+    if [ "$in_todos" = true ]; then
+        if [[ "$line" =~ $heading_pattern ]]; then
+            break
+        fi
+        if [[ "$line" =~ $todo_marker ]]; then
+            last_todo_line=$current_line
+        fi
+    fi
+done < "$ctx_file"
+
+# Insert new todo after last_todo_line
+temp_file=$(mktemp)
+current_line=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+    ((current_line++))
+    echo "$line" >> "$temp_file"
+    if [ $current_line -eq $last_todo_line ]; then
+        echo "- [ ] $task" >> "$temp_file"
+    fi
+done < "$ctx_file"
+mv "$temp_file" "$ctx_file"
+echo -e "${GREEN}✓ Added task: $task${NC}"

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# git-ctx-rm: Delete a todo item
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+target_idx="$1"
+if [ -z "$target_idx" ]; then
+    echo -e "${RED}Error: Specify a todo index to delete.${NC}"
+    exit 1
+fi
+
+line_num=$(get_line_num_for_index "$target_idx")
+if [ -z "$line_num" ]; then
+    echo -e "${RED}Error: Todo index $target_idx not found.${NC}"
+    exit 1
+fi
+
+temp_file=$(mktemp)
+current_line=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+    ((current_line++))
+    if [ $current_line -eq $line_num ]; then
+        continue
+    else
+        echo "$line" >> "$temp_file"
+    fi
+done < "$ctx_file"
+mv "$temp_file" "$ctx_file"
+echo -e "${GREEN}✓ Deleted task $target_idx.${NC}"

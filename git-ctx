@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+# DevEx Manager: git-ctx (Git Branch/Worktree Context Router)
+set -e
+
+# Locate tools relative to this script
+ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+TOOLS_DIR="$ROUTER_DIR/git-ctx-tools"
+
+# Source shared library for colors & initial verification
+source "$TOOLS_DIR/git-ctx-helper.sh"
+
+show_help() {
+    echo -e "${BLUE}DevEx Manager (git ctx)${NC}"
+    echo "Usage: git ctx [command] [arguments]"
+    echo ""
+    echo "Branch-specific scratchpad and todo checklists."
+    echo ""
+    echo "Commands:"
+    echo "  (none/show)       - Show notes and todo checklist for current branch"
+    echo "  edit              - Open context file in your default editor"
+    echo "  add <task>        - Add a new task (shortcut for todo add)"
+    echo "  done <index>      - Mark task as completed (shortcut for todo done)"
+    echo "  undo <index>      - Mark task as incomplete (shortcut for todo undo)"
+    echo "  rm <index>        - Delete a task (shortcut for todo rm)"
+    echo "  clean             - Interactively delete notes for deleted local branches"
+    echo ""
+    echo "Todo Sub-commands:"
+    echo "  todo add <task>   - Add a new checklist task"
+    echo "  todo list         - List all tasks"
+    echo "  todo done <idx>   - Check off a task"
+    echo "  todo undo <idx>   - Uncheck a task"
+    echo "  todo rm <idx>     - Delete a task"
+    echo "  todo clear        - Purge all checked/completed tasks"
+    echo ""
+    echo "Data is stored locally under .git/info/devex/contexts/ and is never committed."
+}
+
+COMMAND="${1:-show}"
+shift || true
+
+case "$COMMAND" in
+    show)
+        "$TOOLS_DIR/git-ctx-show" "$@"
+        ;;
+    edit)
+        "$TOOLS_DIR/git-ctx-edit" "$@"
+        ;;
+    add)
+        "$TOOLS_DIR/git-ctx-add" "$@"
+        ;;
+    done)
+        "$TOOLS_DIR/git-ctx-done" "$@"
+        ;;
+    undo)
+        "$TOOLS_DIR/git-ctx-undo" "$@"
+        ;;
+    rm)
+        "$TOOLS_DIR/git-ctx-rm" "$@"
+        ;;
+    clean)
+        "$TOOLS_DIR/git-ctx-clean" "$@"
+        ;;
+    help|-h|--help)
+        show_help
+        ;;
+    todo)
+        "$TOOLS_DIR/git-ctx-todo" "$@"
+        ;;
+    *)
+        # If unknown command, treat it as 'todo add' with command as the first word
+        if [ -n "$COMMAND" ]; then
+            "$TOOLS_DIR/git-ctx-add" "$COMMAND" "$@"
+        else
+            show_help
+            exit 1
+        fi
+        ;;
+esac

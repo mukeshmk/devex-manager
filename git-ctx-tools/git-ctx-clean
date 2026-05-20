@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+# git-ctx-clean: Delete notes for deleted local branches
+HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+source "$HELPER_DIR/git-ctx-helper.sh"
+
+if [ ! -d "$ctx_dir" ]; then
+    echo -e "${YELLOW}No contexts folder found.${NC}"
+    exit 0
+fi
+
+orphans=()
+for file in "$ctx_dir"/*.md; do
+    [ -e "$file" ] || continue
+    filename=$(basename "$file" .md)
+    branch_name_cleaned="${filename//__//}"
+    
+    # Check if local branch exists
+    if ! git show-ref --verify --quiet "refs/heads/$branch_name_cleaned" 2>/dev/null; then
+        orphans+=("$file|$branch_name_cleaned")
+    fi
+done
+
+if [ ${#orphans[@]} -eq 0 ]; then
+    echo -e "${GREEN}No orphan contexts found. System is clean!${NC}"
+    exit 0
+fi
+
+echo -e "${YELLOW}Found ${#orphans[@]} orphan contexts (branches no longer exist):${NC}"
+for entry in "${orphans[@]}"; do
+    IFS='|' read -r file branch <<< "$entry"
+    echo -e "  - ${branch} (file: $(basename "$file"))"
+done
+
+echo ""
+printf "Would you like to delete these orphan contexts? (y/n) "
+if [ -n "$ZSH_VERSION" ]; then
+    read -k 1 -r
+else
+    read -n 1 -r
+fi
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    for entry in "${orphans[@]}"; do
+        IFS='|' read -r file branch <<< "$entry"
+        rm "$file"
+        echo -e "  ${GREEN}✓ Deleted context file for $branch${NC}"
+    done
+    echo -e "${GREEN}Cleanup complete!${NC}"
+else
+    echo "Cleanup cancelled."
+fi
