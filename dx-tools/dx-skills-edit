@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+s="$1"
+if [ -z "$s" ]; then
+    echo -e "${RED}Error: Skill name argument required.${NC}"
+    echo "Usage: dx skills edit <skill_name>"
+    exit 1
+fi
+
+s_dir="$MASTER_DIR/$s"
+if [ ! -d "$s_dir" ]; then
+    echo -e "${YELLOW}Skill '$s' does not exist in master repository ($MASTER_DIR).${NC}"
+    echo -e -n "Would you like to create it? (y/n): "
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+    mkdir -p "$s_dir"
+    cat <<EOF > "$s_dir/SKILL.md"
+---
+name: $s
+description: Description for $s
+---
+
+# $s
+
+Instructions and guidelines for $s.
+EOF
+    echo -e "${GREEN}✓ Created skill folder and default SKILL.md template.${NC}"
+fi
+
+s_file=$(get_skill_file "$s_dir")
+if [ -z "$s_file" ]; then
+    s_file="$s_dir/SKILL.md"
+    touch "$s_file"
+fi
+
+# Open in Editor
+${EDITOR:-nano} "$s_file"
+
+echo -e "${GREEN}Changes saved.${NC}"
+# Auto run sync via the sync subcommand script
+"$SCRIPT_DIR/dx-skills-sync"
