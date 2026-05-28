@@ -13,6 +13,7 @@ INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
 NB_TOOLS_DIR="$INSTALL_DIR/git-nb-tools"
 CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
+DX_TOOLS_DIR="$INSTALL_DIR/dx-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -52,11 +53,13 @@ fi
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$WT_TOOLS_DIR"
 mkdir -p "$NB_TOOLS_DIR"
+mkdir -p "$DX_TOOLS_DIR"
 
 # 2. Copy executable files
 echo "Installing routers and tools to $INSTALL_DIR..."
 fetch_file "git-wt" "$INSTALL_DIR/git-wt"
 fetch_file "git-nb" "$INSTALL_DIR/git-nb"
+fetch_file "dx" "$INSTALL_DIR/dx"
 
 
 echo "Installing worktree sub-commands to $WT_TOOLS_DIR..."
@@ -72,6 +75,15 @@ fetch_file "git-nb-tools/git-nb-strip" "$NB_TOOLS_DIR/git-nb-strip"
 fetch_file "git-nb-tools/git-nb-diff" "$NB_TOOLS_DIR/git-nb-diff"
 fetch_file "git-nb-tools/git-nb-kernel" "$NB_TOOLS_DIR/git-nb-kernel"
 fetch_file "git-nb-tools/git-nb-list" "$NB_TOOLS_DIR/git-nb-list"
+
+echo "Installing dx sub-commands to $DX_TOOLS_DIR..."
+fetch_file "dx-tools/dx-skills" "$DX_TOOLS_DIR/dx-skills"
+fetch_file "dx-tools/dx-skills-lib.sh" "$DX_TOOLS_DIR/dx-skills-lib.sh"
+fetch_file "dx-tools/dx-skills-list" "$DX_TOOLS_DIR/dx-skills-list"
+fetch_file "dx-tools/dx-skills-sync" "$DX_TOOLS_DIR/dx-skills-sync"
+fetch_file "dx-tools/dx-skills-diff" "$DX_TOOLS_DIR/dx-skills-diff"
+fetch_file "dx-tools/dx-skills-edit" "$DX_TOOLS_DIR/dx-skills-edit"
+fetch_file "dx-tools/dx-skills-rm" "$DX_TOOLS_DIR/dx-skills-rm"
 
 # Ask if user wants to install git-ctx
 INSTALL_GIT_CTX=false
@@ -109,9 +121,11 @@ fi
 # 3. Make the scripts executable
 chmod +x "$INSTALL_DIR/git-wt"
 chmod +x "$INSTALL_DIR/git-nb"
+chmod +x "$INSTALL_DIR/dx"
 chmod +x "$WT_TOOLS_DIR"/git-wt-*
 chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
 chmod +x "$NB_TOOLS_DIR"/git-nb-*
+chmod +x "$DX_TOOLS_DIR"/dx-*
 
 if [ "$INSTALL_GIT_CTX" = true ]; then
     chmod +x "$INSTALL_DIR/git-ctx"
@@ -224,6 +238,39 @@ if [ -n "$SHELL_RC" ]; then
 else
     echo -e "\n${YELLOW}Warning: Could not detect bash or zsh configuration file.${NC}"
     echo -e "Please ensure '$INSTALL_DIR' is in your PATH manually."
+fi
+
+# 6. Initialize global ~/.devex.conf file with template values if needed
+DEVEX_CONF="$HOME/.devex.conf"
+if [ ! -f "$DEVEX_CONF" ]; then
+    echo -e "\n${BLUE}Creating template config file at $DEVEX_CONF...${NC}"
+    cat <<EOF > "$DEVEX_CONF"
+[skills]
+# Central directory where all your master skills and backups live
+master_dir = <path_to_master_skills_dir>
+
+# Active tools list, comma-separated
+tools = <tool_1>, <tool_2>
+
+# Custom skill directories for configured tools (optional, delete or customize)
+<tool_1>_dir = ~/<tool_1>/skills
+<tool_2>_dir = ~/<tool_2>/skills
+EOF
+elif ! grep -q '\[skills\]' "$DEVEX_CONF"; then
+    echo -e "\n${BLUE}Adding [skills] template to existing $DEVEX_CONF...${NC}"
+    cat <<EOF >> "$DEVEX_CONF"
+
+[skills]
+# Central directory where all your master skills and backups live
+master_dir = <path_to_master_skills_dir>
+
+# Active tools list, comma-separated
+tools = <tool_1>, <tool_2>
+
+# Custom skill directories for configured tools (optional, delete or customize)
+<tool_1>_dir = ~/<tool_1>/skills
+<tool_2>_dir = ~/<tool_2>/skills
+EOF
 fi
 
 echo -e "\n${GREEN}✓ Installation complete!${NC}"
