@@ -7,6 +7,7 @@ A collection of lightweight CLI tools to enhance your development workflow. DevE
 - **`git wt` (Worktree Manager):** Simplify working with bare repositories and multiple worktrees.
 - **`git nb` (Notebook Utilities):** Essential tools for AI/ML developers to manage Jupyter Notebooks and kernels.
 - **`git ctx` (Context Manager):** Local, untracked todo checklists and scratchpad notes per branch.
+- **`dx skills` (Prompt Skill Sync Manager):** Bidirectionally synchronize prompt skill folders across multiple AI tools (Claude Code, Kiro, Antigravity, etc.) using a central Master folder.
 - **Python Auto-Venv:** Transparent activation/deactivation of `.venv`, proactive initialization using `uv`, and stale worktree detection.
 - **Git Aliases:** High-productivity shortcuts for common Git operations.
 
@@ -31,7 +32,7 @@ bash install.sh
 ```
 
 ### What the installer does:
-1. Downloads/Copies `git-wt`, `git-nb`, and the sub-command scripts to `~/.local/bin/`
+1. Downloads/Copies `git-wt`, `git-nb`, `git-ctx`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
 2. Makes all scripts executable
 3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases)
 4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv)
@@ -109,6 +110,52 @@ naming_strategy = ticket-prefix
 - **`git ctx rm <index>`**: Delete a checklist item.
 - **`git ctx clean`**: Interactively detect and remove context files for local branches that have already been deleted.
 - **`git ctx todo [list|add|done|undo|rm|clear]`**: Detailed subcommand interface for managing checklist items.
+
+---
+
+## dx skills — Prompt Skill Sync Manager
+
+`dx skills` bidirectionally synchronizes custom agent skill folders (containing `skill.md` or `SKILL.md` prompt files) between different AI tool paths on your local machine, using a central Master directory as the source of truth.
+
+It supports dynamic tool registration, backup files prior to overwrites/deletions, global and tool-specific filters (allowlists and denylists), and interactive confirmations.
+
+### Configuration & Setup
+
+You can configure `dx skills` globally by adding a `[skills]` section to your global `~/.devex.conf` configuration file:
+
+```ini
+[skills]
+# Central directory where all your master skills and backups live
+master_dir = <path_to_master_skills_dir>
+
+# Active tools list, comma-separated
+tools = <tool_1>, <tool_2>
+
+# Custom skill directories for configured tools (optional, delete or customize)
+<tool_1>_dir = ~/<tool_1>/skills
+<tool_2>_dir = ~/<tool_2>/skills
+
+# Global Filters (Optional)
+# sync_only = scrum-update, code-review   # If set, ONLY sync these skills globally
+# ignore = experimental-skill             # Globally ignore this skill folder
+
+# Tool-specific Filters (Optional)
+# <tool_1>_sync_only = scrum-update       # Only sync scrum-update to <tool_1>
+```
+
+If the file `~/.devex.conf` is missing or contains template placeholders (such as `<path_to_master_skills_dir>` or `<tool_1>`), `dx skills` will print a colorized warning message to `stderr` prompting you to check and customize your paths.
+
+### Commands
+
+- **`dx skills [list]`**: Displays a table of all skills, their descriptions (extracted from prompt frontmatter), update states, and last modification times.
+- **`dx skills sync`**: Compares skill folders across all registered tools. Displays a preview of pending bidirectional syncs and executes them with automatic safety backups upon confirmation.
+- **`dx skills diff <skill>`**: Shows a recursive folder diff between target versions.
+- **`dx skills edit <skill>`**: Opens the master version of the skill in your `$EDITOR` and triggers a sync automatically after saving.
+- **`dx skills rm <skill>`**: Backs up and removes the skill directory from the master repo and all active tool paths.
+
+### Backup Strategy
+
+Before executing an overwrite (on `sync`) or delete (on `rm`), `dx skills` copies the target folder's current state to a timestamped backup directory in the master directory under `.backups/YYYY-MM-DD-HHMMSS/`.
 
 ---
 
