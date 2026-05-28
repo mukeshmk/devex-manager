@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+skills=$(get_all_skills)
+
+echo -e "${BLUE}Master Directory: ${NC}$MASTER_DIR"
+echo -e "${BLUE}Active Agents:    ${NC}$(echo "${ACTIVE_TOOLS[@]}" | tr ' ' ',')"
+echo ""
+
+printf "%-22s %-38s %-12s %-20s\n" "Skill" "Description" "Newest" "Last Modified"
+printf "%-22s %-38s %-12s %-20s\n" "-----" "-----------" "------" "-------------"
+
+for s in $skills; do
+    is_ignored "$s" && continue
+    
+    # Find newest version
+    max_mtime=0
+    newest_src="None"
+    newest_skill_file=""
+    
+    # Check master
+    m_mtime=$(get_dir_mtime "$MASTER_DIR/$s")
+    if [ "$m_mtime" -gt "$max_mtime" ]; then
+        max_mtime="$m_mtime"
+        newest_src="master"
+        newest_skill_file=$(get_skill_file "$MASTER_DIR/$s")
+    fi
+    
+    # Check tools
+    for idx in "${!ACTIVE_TOOLS[@]}"; do
+        tool="${ACTIVE_TOOLS[$idx]}"
+        t_dir="${ACTIVE_DIRS[$idx]}"
+        t_mtime=$(get_dir_mtime "$t_dir/$s")
+        if [ "$t_mtime" -gt "$max_mtime" ]; then
+            max_mtime="$t_mtime"
+            newest_src="$tool"
+            newest_skill_file=$(get_skill_file "$t_dir/$s")
+        fi
+    done
+    
+    desc=""
+    if [ -n "$newest_skill_file" ]; then
+        desc=$(parse_frontmatter_field "$newest_skill_file" "description" || true)
+    fi
+    if [ -z "$desc" ]; then
+        desc="No description provided"
+    fi
+    
+    desc_trunc="$desc"
+    if [ ${#desc_trunc} -gt 35 ]; then
+        desc_trunc="${desc_trunc:0:35}..."
+    fi
+    
+    date_str=$(format_date "$max_mtime")
+    printf "%-22s %-38s %-12s %-20s\n" "$s" "$desc_trunc" "$newest_src" "$date_str"
+done
