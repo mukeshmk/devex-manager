@@ -11,7 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-NB_TOOLS_DIR="$INSTALL_DIR/git-nb-tools"
 CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
 DX_TOOLS_DIR="$INSTALL_DIR/dx-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
@@ -39,12 +38,7 @@ else
     echo "  - git-wt router not found"
 fi
 
-if [ -f "$INSTALL_DIR/git-nb" ]; then
-    rm "$INSTALL_DIR/git-nb"
-    echo "  ✓ Removed git-nb router"
-else
-    echo "  - git-nb router not found"
-fi
+
 
 if [ -f "$INSTALL_DIR/git-ctx" ]; then
     rm "$INSTALL_DIR/git-ctx"
@@ -67,12 +61,7 @@ else
     echo "  - git-wt-tools directory not found"
 fi
 
-if [ -d "$NB_TOOLS_DIR" ]; then
-    rm -rf "$NB_TOOLS_DIR"
-    echo "  ✓ Removed git-nb-tools directory"
-else
-    echo "  - git-nb-tools directory not found"
-fi
+
 
 if [ -d "$CTX_TOOLS_DIR" ]; then
     rm -rf "$CTX_TOOLS_DIR"

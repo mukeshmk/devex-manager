@@ -17,12 +17,16 @@ case "$COMMAND" in
     skills)
         "$TOOLS_DIR/dx-skills" "$@"
         ;;
+    nb)
+        "$TOOLS_DIR/dx-nb" "$@"
+        ;;
     *)
         echo -e "${BLUE}DevEx Manager (dx)${NC}"
         echo "Usage: dx <command> [arguments]"
         echo ""
         echo "Available commands:"
         echo "  skills  - Sync, list, and manage AI agent skills"
+        echo "  nb      - Jupyter Notebook utilities (strip, diff, kernel, list)"
         echo ""
         exit 1
         ;;

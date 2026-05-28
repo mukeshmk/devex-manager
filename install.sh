@@ -11,7 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-NB_TOOLS_DIR="$INSTALL_DIR/git-nb-tools"
 CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
 DX_TOOLS_DIR="$INSTALL_DIR/dx-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
@@ -52,13 +51,11 @@ fi
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$WT_TOOLS_DIR"
-mkdir -p "$NB_TOOLS_DIR"
 mkdir -p "$DX_TOOLS_DIR"
 
 # 2. Copy executable files
 echo "Installing routers and tools to $INSTALL_DIR..."
 fetch_file "git-wt" "$INSTALL_DIR/git-wt"
-fetch_file "git-nb" "$INSTALL_DIR/git-nb"
 fetch_file "dx" "$INSTALL_DIR/dx"
 
 
@@ -70,13 +67,7 @@ fetch_file "git-wt-tools/git-wt-clean" "$WT_TOOLS_DIR/git-wt-clean"
 fetch_file "git-wt-tools/git-wt-status" "$WT_TOOLS_DIR/git-wt-status"
 fetch_file "git-wt-tools/devex-lib.sh" "$WT_TOOLS_DIR/devex-lib.sh"
 
-echo "Installing notebook sub-commands to $NB_TOOLS_DIR..."
-fetch_file "git-nb-tools/git-nb-strip" "$NB_TOOLS_DIR/git-nb-strip"
-fetch_file "git-nb-tools/git-nb-diff" "$NB_TOOLS_DIR/git-nb-diff"
-fetch_file "git-nb-tools/git-nb-kernel" "$NB_TOOLS_DIR/git-nb-kernel"
-fetch_file "git-nb-tools/git-nb-list" "$NB_TOOLS_DIR/git-nb-list"
-
-echo "Installing dx sub-commands to $DX_TOOLS_DIR..."
+echo "Installing dx sub-commands and notebooks tools to $DX_TOOLS_DIR..."
 fetch_file "dx-tools/dx-skills" "$DX_TOOLS_DIR/dx-skills"
 fetch_file "dx-tools/dx-skills-lib.sh" "$DX_TOOLS_DIR/dx-skills-lib.sh"
 fetch_file "dx-tools/dx-skills-list" "$DX_TOOLS_DIR/dx-skills-list"
@@ -84,6 +75,11 @@ fetch_file "dx-tools/dx-skills-sync" "$DX_TOOLS_DIR/dx-skills-sync"
 fetch_file "dx-tools/dx-skills-diff" "$DX_TOOLS_DIR/dx-skills-diff"
 fetch_file "dx-tools/dx-skills-edit" "$DX_TOOLS_DIR/dx-skills-edit"
 fetch_file "dx-tools/dx-skills-rm" "$DX_TOOLS_DIR/dx-skills-rm"
+fetch_file "dx-tools/dx-nb" "$DX_TOOLS_DIR/dx-nb"
+fetch_file "dx-tools/dx-nb-strip" "$DX_TOOLS_DIR/dx-nb-strip"
+fetch_file "dx-tools/dx-nb-diff" "$DX_TOOLS_DIR/dx-nb-diff"
+fetch_file "dx-tools/dx-nb-kernel" "$DX_TOOLS_DIR/dx-nb-kernel"
+fetch_file "dx-tools/dx-nb-list" "$DX_TOOLS_DIR/dx-nb-list"
 
 # Ask if user wants to install git-ctx
 INSTALL_GIT_CTX=false
@@ -113,18 +109,16 @@ fi
 
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
 fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
-fetch_file "git-nb-completion.sh" "$WT_TOOLS_DIR/git-nb-completion.sh"
+fetch_file "dx-completion.sh" "$WT_TOOLS_DIR/dx-completion.sh"
 if [ "$INSTALL_GIT_CTX" = true ]; then
     fetch_file "git-ctx-completion.sh" "$WT_TOOLS_DIR/git-ctx-completion.sh"
 fi
 
 # 3. Make the scripts executable
 chmod +x "$INSTALL_DIR/git-wt"
-chmod +x "$INSTALL_DIR/git-nb"
 chmod +x "$INSTALL_DIR/dx"
 chmod +x "$WT_TOOLS_DIR"/git-wt-*
 chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
-chmod +x "$NB_TOOLS_DIR"/git-nb-*
 chmod +x "$DX_TOOLS_DIR"/dx-*
 
 if [ "$INSTALL_GIT_CTX" = true ]; then
@@ -214,12 +208,13 @@ if [ -n "$SHELL_RC" ]; then
         fi
         
         add_to_devex_block "source \"$WT_TOOLS_DIR/git-wt-completion.sh\""
-        add_to_devex_block "source \"$WT_TOOLS_DIR/git-nb-completion.sh\""
+        add_to_devex_block "source \"$WT_TOOLS_DIR/dx-completion.sh\""
         if [ "$INSTALL_GIT_CTX" = true ]; then
             add_to_devex_block "source \"$WT_TOOLS_DIR/git-ctx-completion.sh\""
         fi
     else
-        # Make sure git-ctx-completion is loaded if others were already configured
+        # Make sure git-ctx-completion and dx-completion are loaded if others were already configured
+        add_to_devex_block "source \"$WT_TOOLS_DIR/dx-completion.sh\""
         if [ "$INSTALL_GIT_CTX" = true ]; then
             add_to_devex_block "source \"$WT_TOOLS_DIR/git-ctx-completion.sh\""
         fi
