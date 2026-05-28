@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# git-nb-diff
+# dx-nb-diff
 # Provides human-readable diffs for Jupyter Notebooks.
 
 set -e
@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 if [ "$#" -eq 0 ]; then
-    echo "Usage: git nb diff <notebook1.ipynb> [arguments to git diff]"
+    echo "Usage: dx nb diff <notebook1.ipynb> [arguments to git diff]"
     exit 1
 fi
 

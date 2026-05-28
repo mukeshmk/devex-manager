@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# git-nb-kernel
+# dx-nb-kernel
 # Registers the current .venv as a Jupyter kernel using the worktree name.
 
 set -e

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# DevEx Manager: Git Notebook Router
+# DevEx Manager: DX Notebook Router
 set -e
 
 COMMAND="$1"
@@ -8,20 +8,20 @@ COMMAND="$1"
 
 # Locate tools relative to this script
 ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-TOOLS_DIR="$ROUTER_DIR/git-nb-tools"
+TOOLS_DIR="$ROUTER_DIR"
 
 BLUE='\033[0;34m'
 NC='\033[0m'
 
 case "$COMMAND" in
-    strip)  "$TOOLS_DIR/git-nb-strip" "$@" ;;
-    diff)   "$TOOLS_DIR/git-nb-diff" "$@" ;;
-    kernel) "$TOOLS_DIR/git-nb-kernel" "$@" ;;
-    list)   "$TOOLS_DIR/git-nb-list" "$@" ;;
+    strip)  "$TOOLS_DIR/dx-nb-strip" "$@" ;;
+    diff)   "$TOOLS_DIR/dx-nb-diff" "$@" ;;
+    kernel) "$TOOLS_DIR/dx-nb-kernel" "$@" ;;
+    list)   "$TOOLS_DIR/dx-nb-list" "$@" ;;
 
     *)
-        echo -e "${BLUE}DevEx Manager (git nb)${NC}"
-        echo "Usage: git nb <command> [arguments]"
+        echo -e "${BLUE}DevEx Manager (dx nb)${NC}"
+        echo "Usage: dx nb <command> [arguments]"
         echo ""
         echo "Available commands:"
         echo "  strip   - Clear outputs/metadata (bulk support)"

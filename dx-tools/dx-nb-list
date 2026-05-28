@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# git-nb-list
+# dx-nb-list
 # Recursively discovers notebooks and reports their metadata.
 
 set -e

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# git-nb-strip
+# dx-nb-strip
 # Clears outputs and metadata from Jupyter Notebooks.
 
 set -e
@@ -11,8 +11,8 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 if [ "$#" -eq 0 ]; then
-    echo "Usage: git nb strip <notebook1.ipynb> [notebook2.ipynb ...]"
-    echo "Example: git nb strip *.ipynb"
+    echo "Usage: dx nb strip <notebook1.ipynb> [notebook2.ipynb ...]"
+    echo "Example: dx nb strip *.ipynb"
     exit 1
 fi
 
