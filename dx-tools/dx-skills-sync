@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+skills=$(get_all_skills)
+PENDING_UPDATES=()
+
+for s in $skills; do
+    is_ignored "$s" && continue
+    
+    # 1. Determine newest source folder
+    max_mtime=0
+    newest_src=""
+    newest_dir=""
+    
+    m_dir="$MASTER_DIR/$s"
+    m_mtime=$(get_dir_mtime "$m_dir")
+    if [ "$m_mtime" -gt "$max_mtime" ]; then
+        max_mtime="$m_mtime"
+        newest_src="master"
+        newest_dir="$m_dir"
+    fi
+    
+    for idx in "${!ACTIVE_TOOLS[@]}"; do
+        tool="${ACTIVE_TOOLS[$idx]}"
+        t_dir="${ACTIVE_DIRS[$idx]}/$s"
+        t_mtime=$(get_dir_mtime "$t_dir")
+        if [ "$t_mtime" -gt "$max_mtime" ]; then
+            max_mtime="$t_mtime"
+            newest_src="$tool"
+            newest_dir="$t_dir"
+        fi
+    done
+    
+    [ -z "$newest_dir" ] && continue
+    
+    # 2. Check sync targets
+    # Master destination check
+    if [ "$newest_src" != "master" ]; then
+        dest_dir="$MASTER_DIR/$s"
+        if [ ! -d "$dest_dir" ] || ! diff -rq "$newest_dir" "$dest_dir" &>/dev/null; then
+            PENDING_UPDATES+=("$s|$newest_src|$newest_dir|master|$dest_dir")
+        fi
+    fi
+    
+    # Tools destination checks
+    for idx in "${!ACTIVE_TOOLS[@]}"; do
+        tool="${ACTIVE_TOOLS[$idx]}"
+        t_dir="${ACTIVE_DIRS[$idx]}"
+        sync_rules="${ACTIVE_SYNC_RULES[$idx]}"
+        
+        # Skip if tool sync list is set and doesn't contain the skill
+        if [ -n "$sync_rules" ] && ! in_list "$s" "$sync_rules"; then
+            continue
+        fi
+        
+        if [ "$newest_src" != "$tool" ]; then
+            dest_dir="$t_dir/$s"
+            if [ ! -d "$dest_dir" ] || ! diff -rq "$newest_dir" "$dest_dir" &>/dev/null; then
+                PENDING_UPDATES+=("$s|$newest_src|$newest_dir|$tool|$dest_dir")
+            fi
+        fi
+    done
+done
+
+if [ ${#PENDING_UPDATES[@]} -eq 0 ]; then
+    echo -e "${GREEN}All skills are already synchronized!${NC}"
+    exit 0
+fi
+
+# 3. Print Summary of Syncs
+echo -e "${BLUE}The following synchronizations are pending:${NC}"
+
+# Group destinations by skill for nice output
+uniq_skills=$(echo "${PENDING_UPDATES[@]}" | tr ' ' '\n' | cut -d'|' -f1 | sort -u)
+for s in $uniq_skills; do
+    src=""
+    dests=()
+    for action in "${PENDING_UPDATES[@]}"; do
+        skill_part=$(echo "$action" | cut -d'|' -f1)
+        if [ "$skill_part" = "$s" ]; then
+            src=$(echo "$action" | cut -d'|' -f2)
+            dests+=($(echo "$action" | cut -d'|' -f4))
+        fi
+    done
+    dest_list=$(echo "${dests[@]}" | tr ' ' ',')
+    echo -e "  - ${YELLOW}[$s]${NC}  Copying from ${GREEN}$src${NC}  -->  ${BLUE}$dest_list${NC}"
+done
+
+echo -e -n "\n${YELLOW}Proceed with synchronization? (y/n): ${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo -e "${RED}Synchronization cancelled.${NC}"
+    exit 1
+fi
+
+# 4. Perform backups and copy/rsync
+BACKUP_TS=$(date "+%Y-%m-%d-%H%M%S")
+BACKUP_ROOT="$MASTER_DIR/.backups/$BACKUP_TS"
+
+echo ""
+for action in "${PENDING_UPDATES[@]}"; do
+    s=$(echo "$action" | cut -d'|' -f1)
+    src_name=$(echo "$action" | cut -d'|' -f2)
+    src_dir=$(echo "$action" | cut -d'|' -f3)
+    dest_name=$(echo "$action" | cut -d'|' -f4)
+    dest_dir=$(echo "$action" | cut -d'|' -f5)
+    
+    # Backup destination folder if it exists
+    if [ -d "$dest_dir" ]; then
+        b_dir="$BACKUP_ROOT/$dest_name"
+        mkdir -p "$b_dir"
+        cp -R "$dest_dir" "$b_dir/$s"
+    fi
+    
+    # Sync via rsync
+    mkdir -p "$(dirname "$dest_dir")"
+    rsync -a --delete "$src_dir/" "$dest_dir/"
+    echo -e "  [sync] $s: $src_name -> $dest_name... Done"
+done
+
+echo -e "\n${GREEN}✓ Synchronization complete!${NC}"
+echo -e "Backups stored in: ${BLUE}$BACKUP_ROOT${NC}"
