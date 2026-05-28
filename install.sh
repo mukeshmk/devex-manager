@@ -12,7 +12,8 @@ NC='\033[0m'
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
 CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
-DX_TOOLS_DIR="$INSTALL_DIR/dx-tools"
+DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
+DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -51,7 +52,8 @@ fi
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$WT_TOOLS_DIR"
-mkdir -p "$DX_TOOLS_DIR"
+mkdir -p "$DX_SKILLS_TOOLS_DIR"
+mkdir -p "$DX_NB_TOOLS_DIR"
 
 # 2. Copy executable files
 echo "Installing routers and tools to $INSTALL_DIR..."
@@ -67,19 +69,21 @@ fetch_file "git-wt-tools/git-wt-clean" "$WT_TOOLS_DIR/git-wt-clean"
 fetch_file "git-wt-tools/git-wt-status" "$WT_TOOLS_DIR/git-wt-status"
 fetch_file "git-wt-tools/devex-lib.sh" "$WT_TOOLS_DIR/devex-lib.sh"
 
-echo "Installing dx sub-commands and notebooks tools to $DX_TOOLS_DIR..."
-fetch_file "dx-tools/dx-skills" "$DX_TOOLS_DIR/dx-skills"
-fetch_file "dx-tools/dx-skills-lib.sh" "$DX_TOOLS_DIR/dx-skills-lib.sh"
-fetch_file "dx-tools/dx-skills-list" "$DX_TOOLS_DIR/dx-skills-list"
-fetch_file "dx-tools/dx-skills-sync" "$DX_TOOLS_DIR/dx-skills-sync"
-fetch_file "dx-tools/dx-skills-diff" "$DX_TOOLS_DIR/dx-skills-diff"
-fetch_file "dx-tools/dx-skills-edit" "$DX_TOOLS_DIR/dx-skills-edit"
-fetch_file "dx-tools/dx-skills-rm" "$DX_TOOLS_DIR/dx-skills-rm"
-fetch_file "dx-tools/dx-nb" "$DX_TOOLS_DIR/dx-nb"
-fetch_file "dx-tools/dx-nb-strip" "$DX_TOOLS_DIR/dx-nb-strip"
-fetch_file "dx-tools/dx-nb-diff" "$DX_TOOLS_DIR/dx-nb-diff"
-fetch_file "dx-tools/dx-nb-kernel" "$DX_TOOLS_DIR/dx-nb-kernel"
-fetch_file "dx-tools/dx-nb-list" "$DX_TOOLS_DIR/dx-nb-list"
+echo "Installing dx skills tools to $DX_SKILLS_TOOLS_DIR..."
+fetch_file "dx-skills-tools/dx-skills" "$DX_SKILLS_TOOLS_DIR/dx-skills"
+fetch_file "dx-skills-tools/dx-skills-lib.sh" "$DX_SKILLS_TOOLS_DIR/dx-skills-lib.sh"
+fetch_file "dx-skills-tools/dx-skills-list" "$DX_SKILLS_TOOLS_DIR/dx-skills-list"
+fetch_file "dx-skills-tools/dx-skills-sync" "$DX_SKILLS_TOOLS_DIR/dx-skills-sync"
+fetch_file "dx-skills-tools/dx-skills-diff" "$DX_SKILLS_TOOLS_DIR/dx-skills-diff"
+fetch_file "dx-skills-tools/dx-skills-edit" "$DX_SKILLS_TOOLS_DIR/dx-skills-edit"
+fetch_file "dx-skills-tools/dx-skills-rm" "$DX_SKILLS_TOOLS_DIR/dx-skills-rm"
+
+echo "Installing dx notebook tools to $DX_NB_TOOLS_DIR..."
+fetch_file "dx-nb-tools/dx-nb" "$DX_NB_TOOLS_DIR/dx-nb"
+fetch_file "dx-nb-tools/dx-nb-strip" "$DX_NB_TOOLS_DIR/dx-nb-strip"
+fetch_file "dx-nb-tools/dx-nb-diff" "$DX_NB_TOOLS_DIR/dx-nb-diff"
+fetch_file "dx-nb-tools/dx-nb-kernel" "$DX_NB_TOOLS_DIR/dx-nb-kernel"
+fetch_file "dx-nb-tools/dx-nb-list" "$DX_NB_TOOLS_DIR/dx-nb-list"
 
 # Ask if user wants to install git-ctx
 INSTALL_GIT_CTX=false
@@ -119,7 +123,8 @@ chmod +x "$INSTALL_DIR/git-wt"
 chmod +x "$INSTALL_DIR/dx"
 chmod +x "$WT_TOOLS_DIR"/git-wt-*
 chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
-chmod +x "$DX_TOOLS_DIR"/dx-*
+chmod +x "$DX_SKILLS_TOOLS_DIR"/dx-*
+chmod +x "$DX_NB_TOOLS_DIR"/dx-*
 
 if [ "$INSTALL_GIT_CTX" = true ]; then
     chmod +x "$INSTALL_DIR/git-ctx"

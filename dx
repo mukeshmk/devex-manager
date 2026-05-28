@@ -8,17 +8,18 @@ COMMAND="$1"
 
 # Locate tools relative to this script
 ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-TOOLS_DIR="$ROUTER_DIR/dx-tools"
+SKILLS_TOOLS_DIR="$ROUTER_DIR/dx-skills-tools"
+NB_TOOLS_DIR="$ROUTER_DIR/dx-nb-tools"
 
 BLUE='\033[0;34m'
 NC='\033[0m'
 
 case "$COMMAND" in
     skills)
-        "$TOOLS_DIR/dx-skills" "$@"
+        "$SKILLS_TOOLS_DIR/dx-skills" "$@"
         ;;
     nb)
-        "$TOOLS_DIR/dx-nb" "$@"
+        "$NB_TOOLS_DIR/dx-nb" "$@"
         ;;
     *)
         echo -e "${BLUE}DevEx Manager (dx)${NC}"
