@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+s="$1"
+if [ -z "$s" ]; then
+    echo -e "${RED}Error: Skill name argument required.${NC}"
+    echo "Usage: dx skills rm <skill_name>"
+    exit 1
+fi
+
+# Check where skill exists
+exists=false
+dirs=()
+names=()
+
+if [ -d "$MASTER_DIR/$s" ]; then
+    exists=true
+    dirs+=("$MASTER_DIR/$s")
+    names+=("master")
+fi
+for idx in "${!ACTIVE_TOOLS[@]}"; do
+    t_dir="${ACTIVE_DIRS[$idx]}/$s"
+    if [ -d "$t_dir" ]; then
+        exists=true
+        dirs+=("$t_dir")
+        names+=("${ACTIVE_TOOLS[$idx]}")
+    fi
+done
+
+if [ "$exists" = false ]; then
+    echo -e "${RED}Error: Skill '$s' not found.${NC}"
+    exit 1
+fi
+
+echo -e "${RED}WARNING: You are about to delete skill '$s' from: ${names[*]}${NC}"
+echo -e -n "${YELLOW}Are you sure you want to proceed? (y/n): ${NC}"
+read -r response
+if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+BACKUP_TS=$(date "+%Y-%m-%d-%H%M%S")
+BACKUP_ROOT="$MASTER_DIR/.backups/$BACKUP_TS/deleted"
+mkdir -p "$BACKUP_ROOT"
+
+# Backup and delete
+for ((i=0; i<${#dirs[@]}; i++)); do
+    d="${dirs[$i]}"
+    name="${names[$i]}"
+    
+    # Backup
+    mkdir -p "$BACKUP_ROOT/$name"
+    cp -R "$d" "$BACKUP_ROOT/$name/$s"
+    
+    # Delete
+    rm -rf "$d"
+    echo -e "  [delete] $s from $name... Done"
+done
+
+echo -e "\n${GREEN}✓ Skill '$s' deleted successfully.${NC}"
+echo -e "Backup stored in: ${BLUE}$BACKUP_ROOT/$s${NC}"
