@@ -1,11 +1,11 @@
 # DevEx Manager — Developer Experience Tools
 
-A collection of lightweight CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `git nb` for Jupyter Notebook utilities, `git ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
+A collection of lightweight CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `dx nb` for Jupyter Notebook utilities, `git ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
 
 ## Key Features
 
 - **`git wt` (Worktree Manager):** Simplify working with bare repositories and multiple worktrees.
-- **`git nb` (Notebook Utilities):** Essential tools for AI/ML developers to manage Jupyter Notebooks and kernels.
+- **`dx nb` (Notebook Utilities):** Essential tools for AI/ML developers to manage Jupyter Notebooks and kernels.
 - **`git ctx` (Context Manager):** Local, untracked todo checklists and scratchpad notes per branch.
 - **`dx skills` (Prompt Skill Sync Manager):** Bidirectionally synchronize prompt skill folders across multiple AI tools (Claude Code, Kiro, Antigravity, etc.) using a central Master folder.
 - **Python Auto-Venv:** Transparent activation/deactivation of `.venv`, proactive initialization using `uv`, and stale worktree detection.
@@ -32,11 +32,11 @@ bash install.sh
 ```
 
 ### What the installer does:
-1. Downloads/Copies `git-wt`, `git-nb`, `git-ctx`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
+1. Downloads/Copies `git-wt`, `git-ctx`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
 2. Makes all scripts executable
 3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases)
 4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv)
-5. Sets up shell auto-completion for `git wt` and `git nb` commands
+5. Sets up shell auto-completion for `git wt` and `dx` commands
 6. Adds `~/.local/bin` to your `PATH` and configures completions in a managed `# >>> DevEx Manager >>>` block in your `~/.zshrc` or `~/.bashrc`
 
 After installing, open a new terminal or run `source ~/.zshrc` (or your respective shell config).
@@ -79,19 +79,19 @@ naming_strategy = ticket-prefix
 
 ---
 
-## git-nb — Jupyter Notebook Utilities
+## dx nb — Jupyter Notebook Utilities
 
-`git nb` provides a set of tools specifically designed for AI/ML developers to make working with Jupyter Notebooks in Git repositories less painful.
+`dx nb` provides a set of tools specifically designed for AI/ML developers to make working with Jupyter Notebooks in Git repositories less painful.
 
 ### Commands
 
-- **`git nb strip [notebooks...]`**: Clears cell outputs and metadata from `.ipynb` files. This is essential for keeping Git history clean and avoiding massive diffs caused by binary data or volatile metadata.
+- **`dx nb strip [notebooks...]`**: Clears cell outputs and metadata from `.ipynb` files. This is essential for keeping Git history clean and avoiding massive diffs caused by binary data or volatile metadata.
   - *Requires: `nbstripout` or `nbconvert`*
-- **`git nb kernel`**: Automatically registers the current `.venv` as a Jupyter kernel. It intelligently names the kernel after the current **worktree** or directory name, making it easy to identify the correct environment in JupyterLab/Notebook.
+- **`dx nb kernel`**: Automatically registers the current `.venv` as a Jupyter kernel. It intelligently names the kernel after the current **worktree** or directory name, making it easy to identify the correct environment in JupyterLab/Notebook.
   - *Requires: `ipykernel`*
-- **`git nb list`**: Recursively discovers all notebooks in the project and reports their file sizes, cell counts, and "stripped" status (whether they contain output data).
+- **`dx nb list`**: Recursively discovers all notebooks in the project and reports their file sizes, cell counts, and "stripped" status (whether they contain output data).
   - *Recommended: `jq` for full metadata reporting*
-- **`git nb diff <notebook> [git-diff-args]`**: Provides a human-readable diff of notebook cells. If `nbdime` is installed, it uses `nbdiff` for a rich experience; otherwise, it falls back to a standard JSON diff with a helpful warning.
+- **`dx nb diff <notebook> [git-diff-args]`**: Provides a human-readable diff of notebook cells. If `nbdime` is installed, it uses `nbdiff` for a rich experience; otherwise, it falls back to a standard JSON diff with a helpful warning.
   - *Recommended: `nbdime`*
 
 ---

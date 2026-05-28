@@ -46,7 +46,7 @@ graph LR
 
 ---
 
-## 2. git nb — Notebook Utilities
+## 2. dx nb — Notebook Utilities
 
 ```mermaid
 sequenceDiagram
@@ -56,11 +56,11 @@ sequenceDiagram
 
     Dev->>NB: Experiment & Run
     Note right of NB: 🟡 Dirty (Outputs/Metadata)
-    Dev->>NB: git nb strip
+    Dev->>NB: dx nb strip
     Note right of NB: 🟢 Clean (Ready to commit)
     Dev->>Git: git add & commit
     Note right of Git: 🟢 Minimal Diffs
-    Dev->>NB: git nb kernel
+    Dev->>NB: dx nb kernel
     Note right of NB: 🔵 Venv Registered
 ```
 
