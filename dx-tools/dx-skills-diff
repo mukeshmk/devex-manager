@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve script directory and source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+s="$1"
+if [ -z "$s" ]; then
+    echo -e "${RED}Error: Skill name argument required.${NC}"
+    echo "Usage: dx skills diff <skill_name>"
+    exit 1
+fi
+
+# Check if skill exists at all
+exists=false
+dirs=()
+names=()
+
+if [ -d "$MASTER_DIR/$s" ]; then
+    exists=true
+    dirs+=("$MASTER_DIR/$s")
+    names+=("master")
+fi
+for idx in "${!ACTIVE_TOOLS[@]}"; do
+    t_dir="${ACTIVE_DIRS[$idx]}/$s"
+    if [ -d "$t_dir" ]; then
+        exists=true
+        dirs+=("$t_dir")
+        names+=("${ACTIVE_TOOLS[$idx]}")
+    fi
+done
+
+if [ "$exists" = false ]; then
+    echo -e "${RED}Error: Skill '$s' not found in any active directory.${NC}"
+    exit 1
+fi
+
+if [ ${#dirs[@]} -le 1 ]; then
+    echo "Skill '$s' only exists in ${names[0]} (no other versions to diff against)."
+    exit 0
+fi
+
+# Compare each against master if master exists, otherwise compare first against rest
+base_dir="${dirs[0]}"
+base_name="${names[0]}"
+
+diff_found=false
+for ((i=1; i<${#dirs[@]}; i++)); do
+    compare_dir="${dirs[$i]}"
+    compare_name="${names[$i]}"
+    
+    if ! diff -rq "$base_dir" "$compare_dir" &>/dev/null; then
+        diff_found=true
+        echo -e "${BLUE}=== Diff: $base_name vs $compare_name ===${NC}"
+        diff -ruN "$base_dir" "$compare_dir" || true
+        echo ""
+    fi
+done
+
+if [ "$diff_found" = false ]; then
+    echo -e "${GREEN}Skill '$s' is in sync across all active targets (${names[*]}).${NC}"
+fi
