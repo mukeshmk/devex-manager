@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# DevEx Manager: DX Skills CLI Command Router
+set -e
+
+COMMAND="$1"
+[ "$#" -gt 0 ] && shift
+
+# Locate tools relative to this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/dx-skills-lib.sh"
+
+case "$COMMAND" in
+    list)
+        "$SCRIPT_DIR/dx-skills-list" "$@"
+        ;;
+    sync)
+        "$SCRIPT_DIR/dx-skills-sync" "$@"
+        ;;
+    diff)
+        "$SCRIPT_DIR/dx-skills-diff" "$@"
+        ;;
+    edit)
+        "$SCRIPT_DIR/dx-skills-edit" "$@"
+        ;;
+    rm)
+        "$SCRIPT_DIR/dx-skills-rm" "$@"
+        ;;
+    *)
+        if [ -z "$COMMAND" ]; then
+            "$SCRIPT_DIR/dx-skills-list" "$@"
+        else
+            echo -e "${RED}Error: Unknown command '$COMMAND'${NC}"
+            echo "Usage: dx skills [list|sync|diff|edit|rm] [arguments]"
+            exit 1
+        fi
+        ;;
+esac
