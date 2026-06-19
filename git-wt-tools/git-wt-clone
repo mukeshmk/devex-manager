@@ -46,14 +46,13 @@ main_worktree_name = $default_branch
 # into each new worktree. Paths are relative to the worktree root.
 # Symlinked paths share the same underlying file — changes in one worktree
 # are reflected in all others.
-paths = .claude,.kiro,.vscode
+paths =
 
 [copies]
 # Comma-separated list of files and directories to copy from the main worktree
 # into each new worktree. Paths are relative to the worktree root.
-# Copied paths are independent — each worktree gets its own copy that can
-# diverge from the original.
-paths =
+# Use 'git wt sync' to synchronize changes across worktrees.
+paths = .claude,.kiro,.vscode
 
 [worktree]
 # How to derive the worktree folder name from the branch name.

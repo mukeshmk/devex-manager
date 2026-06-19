@@ -1,0 +1,564 @@
+#!/usr/bin/env bash
+
+# git-wt-tools/git-wt-sync
+#
+# Synchronize configuration copies across active worktrees.
+# Usage: git wt sync
+
+set -e
+
+# Source shared config library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/devex-lib.sh"
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Ensure the user is in a Git repository
+GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)" || {
+    echo -e "${RED}Error: Not in a git repository${NC}" >&2
+    exit 1
+}
+
+# Resolve Git common dir (resolves correct internal git folder without hardcoding .git)
+GIT_COMMON_DIR="$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" && pwd)"
+MANIFEST_FILE="$GIT_COMMON_DIR/info/devex/sync-manifest"
+
+# Handle both bare and non-bare repos for REPO_ROOT resolution
+if git rev-parse --is-bare-repository 2>/dev/null | grep -q "true"; then
+    REPO_ROOT="$(cd "$GIT_DIR" && pwd)"
+    if [ "$(basename "$REPO_ROOT")" = ".git" ]; then
+        REPO_ROOT="$(dirname "$REPO_ROOT")"
+    fi
+else
+    if [ -f "$GIT_COMMON_DIR/config" ] && grep -q "bare = true" "$GIT_COMMON_DIR/config" 2>/dev/null; then
+        REPO_ROOT="$GIT_COMMON_DIR"
+        if [ "$(basename "$REPO_ROOT")" = ".git" ]; then
+            REPO_ROOT="$(dirname "$REPO_ROOT")"
+        fi
+    else
+        REPO_ROOT="$(git rev-parse --show-toplevel)"
+    fi
+fi
+
+# Load config (sets DEVEX_* variables)
+devex_load_config "$REPO_ROOT"
+
+if [ -z "$DEVEX_COPY_PATHS" ]; then
+    echo -e "${YELLOW}No copy paths configured in .devex.conf (copies.paths). Nothing to sync.${NC}"
+    exit 0
+fi
+
+# Locate Main Worktree dynamically and collect all active worktree realpaths
+MAIN_WORKTREE=""
+ACTIVE_WORKTREES=()
+while read -r line; do
+    [ -z "$line" ] && continue
+    # Skip bare repository entry
+    if [[ "$line" == *"(bare)"* ]]; then
+        continue
+    fi
+    path=$(echo "$line" | awk '{print $1}')
+    realpath="$(cd "$path" && pwd -P)"
+    ACTIVE_WORKTREES+=("$realpath")
+    
+    # Check if this worktree is the main worktree (respect DEVEX_MAIN_WORKTREE_NAME)
+    folder=$(basename "$realpath")
+    if [ "$folder" = "$DEVEX_MAIN_WORKTREE_NAME" ]; then
+        MAIN_WORKTREE="$realpath"
+    fi
+done <<< "$(git worktree list)"
+
+# If main worktree wasn't matched by name, fallback to repo root/main or first worktree
+if [ -z "$MAIN_WORKTREE" ]; then
+    if [ -d "$REPO_ROOT/$DEVEX_MAIN_WORKTREE_NAME" ]; then
+        MAIN_WORKTREE="$(cd "$REPO_ROOT/$DEVEX_MAIN_WORKTREE_NAME" && pwd -P)"
+    elif [ ${#ACTIVE_WORKTREES[@]} -gt 0 ]; then
+        MAIN_WORKTREE="${ACTIVE_WORKTREES[0]}"
+    else
+        echo -e "${RED}Error: No active worktrees found.${NC}" >&2
+        exit 1
+    fi
+fi
+
+# Lock Detection: Scan main worktree for conflict files
+conflicts=$(find "$MAIN_WORKTREE" -name "*.devex-conflict-*" 2>/dev/null || true)
+if [ -n "$conflicts" ]; then
+    echo -e "${RED}Sync blocked: Unresolved conflicts detected. Resolve the files, delete the conflict markers, and try again.${NC}" >&2
+    exit 1
+fi
+
+# Helpers to get modification times and file sizes
+get_mtime() {
+    local path="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f "%m" "$path" 2>/dev/null || echo 0
+    else
+        stat -c "%Y" "$path" 2>/dev/null || echo 0
+    fi
+}
+
+get_size() {
+    local path="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f "%z" "$path" 2>/dev/null || echo 0
+    else
+        stat -c "%s" "$path" 2>/dev/null || echo 0
+    fi
+}
+
+# Recursively lists relative file paths under wt for path p
+get_relative_files() {
+    local wt="$1"
+    local p="$2"
+    if [ -f "$wt/$p" ]; then
+        echo "$p"
+    elif [ -d "$wt/$p" ]; then
+        find "$wt/$p" -type f 2>/dev/null | while read -r f; do
+            echo "${f#"$wt/"}"
+        done
+    fi
+}
+
+prompt_yn() {
+    local question="$1"
+    local default_val="$2" # "Y" or "N"
+    local reply
+    
+    if [ -t 0 ] || [ "${DEVEX_TEST_INTERACTIVE:-}" = "true" ]; then
+        if [ "$default_val" = "Y" ]; then
+            echo -n "  $question [Y/n]: " >&2
+        else
+            echo -n "  $question [y/N]: " >&2
+        fi
+        read -r reply
+        reply="${reply:-$default_val}"
+        if [[ "$reply" =~ ^[Yy]$ ]]; then
+            echo "y"
+        else
+            echo "n"
+        fi
+    else
+        if [ "$default_val" = "Y" ]; then
+            echo "y"
+        else
+            echo "n"
+        fi
+    fi
+}
+
+prompt_conflict() {
+    local filename="$1"
+    local wt_name="$2"
+    local choice
+    
+    if [ -t 0 ] || [ "${DEVEX_TEST_INTERACTIVE:-}" = "true" ]; then
+        echo -e "  Conflict in $filename. Which version should be kept?" >&2
+        echo "    1) Keep Main version" >&2
+        echo "    2) Keep $wt_name version" >&2
+        echo "    3) Resolve Later (Default)" >&2
+        echo -n "  Select an option [1-3]: " >&2
+        read -r choice
+        choice="${choice:-3}"
+        echo "$choice"
+    else
+        echo "3"
+    fi
+}
+
+prompt_multi_wt_conflict() {
+    local filename="$1"
+    local wt_a="$2"
+    local wt_b="$3"
+    local choice
+    
+    if [ -t 0 ] || [ "${DEVEX_TEST_INTERACTIVE:-}" = "true" ]; then
+        echo -e "  Conflict in $filename. Modified in $wt_a and $wt_b. Which version to keep?" >&2
+        echo "    1) Keep $wt_a" >&2
+        echo "    2) Keep $wt_b" >&2
+        echo "    3) Resolve Later (Default)" >&2
+        echo -n "  Select an option [1-3]: " >&2
+        read -r choice
+        choice="${choice:-3}"
+        echo "$choice"
+    else
+        echo "3"
+    fi
+}
+
+# Parse manifest using eval for portable dynamic variables (macOS Bash 3.2 compatibility)
+if [ -f "$MANIFEST_FILE" ]; then
+    while IFS='|' read -r rel_path mtime size || [ -n "$rel_path" ]; do
+        [ -z "$rel_path" ] && continue
+        safe_name=$(echo "$rel_path" | tr -c 'a-zA-Z0-9' '_')
+        eval "MANIFEST_MTIME_$safe_name=\"\$mtime\""
+        eval "MANIFEST_SIZE_$safe_name=\"\$size\""
+    done < "$MANIFEST_FILE"
+fi
+
+# Collect union of all relative files across all worktrees
+IFS=',' read -ra _cpaths <<< "$DEVEX_COPY_PATHS"
+REL_FILES_STR=""
+
+for wt in "${ACTIVE_WORKTREES[@]}"; do
+    for p in "${_cpaths[@]}"; do
+        p="${p#"${p%%[![:space:]]*}"}"
+        p="${p%"${p##*[![:space:]]}"}"
+        [ -z "$p" ] && continue
+        
+        while read -r rel_f; do
+            [ -z "$rel_f" ] && continue
+            # Avoid duplicates
+            if [[ ! " $REL_FILES_STR " == *" $rel_f "* ]]; then
+                REL_FILES_STR="$REL_FILES_STR $rel_f"
+            fi
+        done <<< "$(get_relative_files "$wt" "$p")"
+    done
+done
+
+# Convert to sorted array
+REL_FILES=()
+for f in $REL_FILES_STR; do
+    REL_FILES+=("$f")
+done
+
+if [ ${#REL_FILES[@]} -gt 0 ]; then
+    IFS=$'\n' sorted=($(sort <<< "${REL_FILES[*]}"))
+    unset IFS
+    REL_FILES=("${sorted[@]}")
+fi
+
+echo -e "${BLUE}Synchronizing configuration copies...${NC}"
+echo -e "Main worktree: ${GREEN}$(basename "$MAIN_WORKTREE")${NC}"
+
+# Loop through each file and apply rules
+for f in "${REL_FILES[@]}"; do
+    safe_name=$(echo "$f" | tr -c 'a-zA-Z0-9' '_')
+    eval "recorded_mtime=\"\$MANIFEST_MTIME_$safe_name\""
+    eval "recorded_size=\"\$MANIFEST_SIZE_$safe_name\""
+    recorded_mtime="${recorded_mtime:-0}"
+    recorded_size="${recorded_size:-0}"
+    
+    # Analyze Main state
+    exists_in_main=false
+    main_modified=false
+    main_deleted=false
+    mtime_main=0
+    size_main=0
+    if [ -f "$MAIN_WORKTREE/$f" ]; then
+        exists_in_main=true
+        mtime_main=$(get_mtime "$MAIN_WORKTREE/$f")
+        size_main=$(get_size "$MAIN_WORKTREE/$f")
+        if [ "$recorded_mtime" -eq 0 ] || [ "$mtime_main" -ne "$recorded_mtime" ] || [ "$size_main" -ne "$recorded_size" ]; then
+            main_modified=true
+        fi
+    else
+        if [ "$recorded_mtime" -ne 0 ]; then
+            main_deleted=true
+        fi
+    fi
+
+    # Scan feature worktrees
+    modifying_wts=()
+    deleting_wts=()
+    untouched_wts=()
+    missing_wts=()
+    
+    for wt_path in "${ACTIVE_WORKTREES[@]}"; do
+        [ "$wt_path" = "$MAIN_WORKTREE" ] && continue
+        wt_name=$(basename "$wt_path")
+        
+        if [ -f "$wt_path/$f" ]; then
+            mtime_wt=$(get_mtime "$wt_path/$f")
+            size_wt=$(get_size "$wt_path/$f")
+            
+            is_mod=false
+            if [ "$recorded_mtime" -eq 0 ]; then
+                is_mod=true
+            else
+                if [ "$mtime_wt" -ge "$recorded_mtime" ]; then
+                    if [ "$mtime_wt" -gt "$recorded_mtime" ] || [ "$size_wt" -ne "$recorded_size" ]; then
+                        is_mod=true
+                    fi
+                    if [ "$is_mod" = false ] && [ "$exists_in_main" = true ] && [ "$main_modified" = false ]; then
+                        if ! diff -q "$wt_path/$f" "$MAIN_WORKTREE/$f" &>/dev/null; then
+                            is_mod=true
+                        fi
+                    fi
+                fi
+            fi
+            
+            if [ "$is_mod" = true ]; then
+                modifying_wts+=("$wt_path")
+            else
+                untouched_wts+=("$wt_path")
+            fi
+        else
+            if [ "$recorded_mtime" -ne 0 ]; then
+                deleting_wts+=("$wt_path")
+            else
+                missing_wts+=("$wt_path")
+            fi
+        fi
+    done
+
+    # Rule Evaluation
+    if [ "$main_deleted" = true ]; then
+        # File was deleted in main since last sync
+        if [ ${#modifying_wts[@]} -eq 0 ]; then
+            # Delete silently from untouched WTs
+            for wt_path in "${untouched_wts[@]}"; do
+                echo -e "${BLUE}  Removing deleted file $f from $(basename "$wt_path")...${NC}"
+                rm -f "$wt_path/$f"
+            done
+        else
+            # Conflict: Deleted in Main but modified in some WTs
+            for wt_path in "${modifying_wts[@]}"; do
+                wt_name=$(basename "$wt_path")
+                choice=$(prompt_conflict "$f" "$wt_name")
+                if [ "$choice" = "1" ]; then
+                    echo -e "${BLUE}  Removing file $f from $wt_name (Keep Main version)...${NC}"
+                    rm -f "$wt_path/$f"
+                elif [ "$choice" = "2" ]; then
+                    echo -e "${BLUE}  Restoring file $f to main and other worktrees (Keep $wt_name version)...${NC}"
+                    mkdir -p "$(dirname "$MAIN_WORKTREE/$f")"
+                    cp -p "$wt_path/$f" "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        [ "$w" != "$wt_path" ] && [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                    done
+                else
+                    echo -e "${YELLOW}  Leaving conflict unresolved for $f. Creating conflict file in main...${NC}"
+                    cp -p "$wt_path/$f" "$MAIN_WORKTREE/${f}.devex-conflict-$wt_name"
+                fi
+            done
+        fi
+
+    elif [ ${#deleting_wts[@]} -gt 0 ]; then
+        # File was deleted in one or more WTs since last sync
+        if [ "$main_modified" = true ]; then
+            # Conflict: Deleted in WT but modified in Main
+            for wt_path in "${deleting_wts[@]}"; do
+                wt_name=$(basename "$wt_path")
+                choice=$(prompt_conflict "$f" "$wt_name")
+                if [ "$choice" = "1" ]; then
+                    echo -e "${BLUE}  Restoring file $f in $wt_name from main...${NC}"
+                    mkdir -p "$(dirname "$wt_path/$f")"
+                    cp -p "$MAIN_WORKTREE/$f" "$wt_path/$f"
+                elif [ "$choice" = "2" ]; then
+                    echo -e "${BLUE}  Deleting file $f from main and other worktrees...${NC}"
+                    rm -f "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        [ "$w" != "$wt_path" ] && rm -f "$w/$f"
+                    done
+                else
+                    echo -e "${YELLOW}  Leaving conflict unresolved for $f. Creating conflict file in main...${NC}"
+                    cp -p "$MAIN_WORKTREE/$f" "$MAIN_WORKTREE/${f}.devex-conflict-$wt_name-main"
+                fi
+            done
+        else
+            # Untouched in Main, prompt to delete or restore
+            for wt_path in "${deleting_wts[@]}"; do
+                wt_name=$(basename "$wt_path")
+                ans=$(prompt_yn "File $f was removed in $wt_name. Remove it from main as well?" "N")
+                if [ "$ans" = "y" ]; then
+                    echo -e "${BLUE}  Removing file $f from main and other worktrees...${NC}"
+                    rm -f "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        rm -f "$w/$f"
+                    done
+                    break
+                else
+                    restore=$(prompt_yn "Restore File $f in $wt_name?" "Y")
+                    if [ "$restore" = "y" ]; then
+                        echo -e "${BLUE}  Restoring file $f to $wt_name...${NC}"
+                        mkdir -p "$(dirname "$wt_path/$f")"
+                        cp -p "$MAIN_WORKTREE/$f" "$wt_path/$f"
+                    fi
+                fi
+            done
+        fi
+
+    elif [ "$exists_in_main" = false ]; then
+        # File does not exist in main (Addition scenario)
+        if [ ${#modifying_wts[@]} -eq 1 ]; then
+            # Added in one WT: copy to main and fan out
+            wt_path="${modifying_wts[0]}"
+            wt_name=$(basename "$wt_path")
+            echo -e "${BLUE}  Copying new file $f from $wt_name to main and fanning out...${NC}"
+            mkdir -p "$(dirname "$MAIN_WORKTREE/$f")"
+            cp -p "$wt_path/$f" "$MAIN_WORKTREE/$f"
+            for w in "${ACTIVE_WORKTREES[@]}"; do
+                [ "$w" != "$wt_path" ] && [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+            done
+        elif [ ${#modifying_wts[@]} -gt 1 ]; then
+            # Added in multiple WTs: check if identical
+            all_identical=true
+            first_wt="${modifying_wts[0]}"
+            for w in "${modifying_wts[@]}"; do
+                if ! diff -q "$first_wt/$f" "$w/$f" &>/dev/null; then
+                    all_identical=false
+                fi
+            done
+            
+            if [ "$all_identical" = true ]; then
+                echo -e "${BLUE}  Copying new file $f (identical additions) to main and fanning out...${NC}"
+                mkdir -p "$(dirname "$MAIN_WORKTREE/$f")"
+                cp -p "$first_wt/$f" "$MAIN_WORKTREE/$f"
+                for w in "${ACTIVE_WORKTREES[@]}"; do
+                    [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                done
+            else
+                # Conflict: Different additions in multiple WTs
+                wt_a="${modifying_wts[0]}"
+                wt_b="${modifying_wts[1]}"
+                choice=$(prompt_multi_wt_conflict "$f" "$(basename "$wt_a")" "$(basename "$wt_b")")
+                if [ "$choice" = "1" ]; then
+                    echo -e "${BLUE}  Keeping version from $(basename "$wt_a")...${NC}"
+                    mkdir -p "$(dirname "$MAIN_WORKTREE/$f")"
+                    cp -p "$wt_a/$f" "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        [ "$w" != "$wt_a" ] && [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                    done
+                elif [ "$choice" = "2" ]; then
+                    echo -e "${BLUE}  Keeping version from $(basename "$wt_b")...${NC}"
+                    mkdir -p "$(dirname "$MAIN_WORKTREE/$f")"
+                    cp -p "$wt_b/$f" "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        [ "$w" != "$wt_b" ] && [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                    done
+                else
+                    echo -e "${YELLOW}  Leaving conflict unresolved for $f. Creating conflict files in main...${NC}"
+                    for w in "${modifying_wts[@]}"; do
+                        cp -p "$w/$f" "$MAIN_WORKTREE/${f}.devex-conflict-$(basename "$w")"
+                    done
+                fi
+            fi
+        fi
+
+    else
+        # File exists in main
+        if [ "$main_modified" = true ]; then
+            if [ ${#modifying_wts[@]} -eq 0 ]; then
+                # Modified in Main only: overwrite WTs silently
+                for w in "${ACTIVE_WORKTREES[@]}"; do
+                    if [ "$w" != "$MAIN_WORKTREE" ]; then
+                        echo -e "${BLUE}  Updating $f in $(basename "$w")...${NC}"
+                        mkdir -p "$(dirname "$w/$f")"
+                        cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                    fi
+                done
+            else
+                # Conflict: Modified in Main AND modified in WT
+                for wt_path in "${modifying_wts[@]}"; do
+                    wt_name=$(basename "$wt_path")
+                    # If they are identical, align their mtimes silently without prompting
+                    if diff -q "$MAIN_WORKTREE/$f" "$wt_path/$f" &>/dev/null; then
+                        cp -p "$MAIN_WORKTREE/$f" "$wt_path/$f"
+                        continue
+                    fi
+                    choice=$(prompt_conflict "$f" "$wt_name")
+                    if [ "$choice" = "1" ]; then
+                        echo -e "${BLUE}  Overwriting $wt_name version with main version...${NC}"
+                        cp -p "$MAIN_WORKTREE/$f" "$wt_path/$f"
+                    elif [ "$choice" = "2" ]; then
+                        echo -e "${BLUE}  Overwriting main version with $wt_name version...${NC}"
+                        cp -p "$wt_path/$f" "$MAIN_WORKTREE/$f"
+                        # Propagate updated main version to all other worktrees
+                        for w in "${ACTIVE_WORKTREES[@]}"; do
+                            [ "$w" != "$wt_path" ] && [ "$w" != "$MAIN_WORKTREE" ] && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                        done
+                    else
+                        echo -e "${YELLOW}  Leaving conflict unresolved for $f. Creating conflict file in main...${NC}"
+                        cp -p "$wt_path/$f" "$MAIN_WORKTREE/${f}.devex-conflict-$wt_name"
+                    fi
+                done
+            fi
+        else
+            # Main is not modified
+            if [ ${#modifying_wts[@]} -eq 1 ]; then
+                # Modified in WT only (WT is newer, Main is older)
+                wt_path="${modifying_wts[0]}"
+                wt_name=$(basename "$wt_path")
+                echo -e "${BLUE}  Updating $f from $wt_name to main and fanning out...${NC}"
+                cp -p "$wt_path/$f" "$MAIN_WORKTREE/$f"
+                for w in "${ACTIVE_WORKTREES[@]}"; do
+                    [ "$w" != "$wt_path" ] && [ "$w" != "$MAIN_WORKTREE" ] && mkdir -p "$(dirname "$w/$f")" && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                done
+            elif [ ${#modifying_wts[@]} -gt 1 ]; then
+                # Modified in multiple WTs, Main untouched
+                all_identical=true
+                first_wt="${modifying_wts[0]}"
+                for w in "${modifying_wts[@]}"; do
+                    if ! diff -q "$first_wt/$f" "$w/$f" &>/dev/null; then
+                        all_identical=false
+                    fi
+                done
+                
+                if [ "$all_identical" = true ]; then
+                    echo -e "${BLUE}  Updating $f (identical modifications) to main and fanning out...${NC}"
+                    cp -p "$first_wt/$f" "$MAIN_WORKTREE/$f"
+                    for w in "${ACTIVE_WORKTREES[@]}"; do
+                        [ "$w" != "$first_wt" ] && [ "$w" != "$MAIN_WORKTREE" ] && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                    done
+                else
+                    # Conflict: Modified in multiple WTs differently
+                    wt_a="${modifying_wts[0]}"
+                    wt_b="${modifying_wts[1]}"
+                    choice=$(prompt_multi_wt_conflict "$f" "$(basename "$wt_a")" "$(basename "$wt_b")")
+                    if [ "$choice" = "1" ]; then
+                        echo -e "${BLUE}  Keeping version from $(basename "$wt_a")...${NC}"
+                        cp -p "$wt_a/$f" "$MAIN_WORKTREE/$f"
+                        for w in "${ACTIVE_WORKTREES[@]}"; do
+                            [ "$w" != "$wt_a" ] && [ "$w" != "$MAIN_WORKTREE" ] && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                        done
+                    elif [ "$choice" = "2" ]; then
+                        echo -e "${BLUE}  Keeping version from $(basename "$wt_b")...${NC}"
+                        cp -p "$wt_b/$f" "$MAIN_WORKTREE/$f"
+                        for w in "${ACTIVE_WORKTREES[@]}"; do
+                            [ "$w" != "$wt_b" ] && [ "$w" != "$MAIN_WORKTREE" ] && cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                        done
+                    else
+                        echo -e "${YELLOW}  Leaving conflict unresolved for $f. Creating conflict files in main...${NC}"
+                        for w in "${modifying_wts[@]}"; do
+                            cp -p "$w/$f" "$MAIN_WORKTREE/${f}.devex-conflict-$(basename "$w")"
+                        done
+                    fi
+                fi
+            elif [ ${#missing_wts[@]} -gt 0 ]; then
+                # File exists in main, and untouched in some WTs, but completely missing in others
+                # (E.g. Added in Main earlier, need to populate to newly created WTs)
+                for w in "${missing_wts[@]}"; do
+                    echo -e "${BLUE}  Copying file $f to $(basename "$w")...${NC}"
+                    mkdir -p "$(dirname "$w/$f")"
+                    cp -p "$MAIN_WORKTREE/$f" "$w/$f"
+                done
+            fi
+        fi
+    fi
+done
+
+# Rebuild manifest from final main worktree files
+echo -e "${GREEN}Rebuilding sync manifest...${NC}"
+mkdir -p "$(dirname "$MANIFEST_FILE")"
+true > "$MANIFEST_FILE"
+
+for p in "${_cpaths[@]}"; do
+    p="${p#"${p%%[![:space:]]*}"}"
+    p="${p%"${p##*[![:space:]]}"}"
+    [ -z "$p" ] && continue
+    
+    while read -r rel_f; do
+        [ -z "$rel_f" ] && continue
+        if [ -f "$MAIN_WORKTREE/$rel_f" ]; then
+            mtime=$(get_mtime "$MAIN_WORKTREE/$rel_f")
+            size=$(get_size "$MAIN_WORKTREE/$rel_f")
+            echo "$rel_f|$mtime|$size" >> "$MANIFEST_FILE"
+        fi
+    done <<< "$(get_relative_files "$MAIN_WORKTREE" "$p")"
+done
+
+echo -e "\n${GREEN}✓ Synchronization complete!${NC}"
