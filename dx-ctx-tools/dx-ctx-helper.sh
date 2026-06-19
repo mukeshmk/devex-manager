@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# git-ctx-helper.sh: Shared logic for git-ctx sub-commands
+# dx-ctx-helper.sh: Shared logic for dx-ctx sub-commands
 set -e
 
 # Colors

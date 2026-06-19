@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
 
-# git-ctx-todo: Route todo sub-commands
+# dx-ctx-todo: Route todo sub-commands
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 TODO_CMD="${1:-list}"
 shift || true
 
 case "$TODO_CMD" in
     list)
-        "$HELPER_DIR/git-ctx-show" "$@"
+        "$HELPER_DIR/dx-ctx-show" "$@"
         ;;
     add)
-        "$HELPER_DIR/git-ctx-add" "$@"
+        "$HELPER_DIR/dx-ctx-add" "$@"
         ;;
     done|check)
-        "$HELPER_DIR/git-ctx-done" "$@"
+        "$HELPER_DIR/dx-ctx-done" "$@"
         ;;
     undo|uncheck)
-        "$HELPER_DIR/git-ctx-undo" "$@"
+        "$HELPER_DIR/dx-ctx-undo" "$@"
         ;;
     rm|delete)
-        "$HELPER_DIR/git-ctx-rm" "$@"
+        "$HELPER_DIR/dx-ctx-rm" "$@"
         ;;
     clear)
-        "$HELPER_DIR/git-ctx-clear" "$@"
+        "$HELPER_DIR/dx-ctx-clear" "$@"
         ;;
     *)
         echo -e "${RED}Unknown todo sub-command: $TODO_CMD${NC}"
-        echo "Run 'git ctx help' for usage."
+        echo "Run 'dx ctx help' for usage."
         exit 1
         ;;
 esac

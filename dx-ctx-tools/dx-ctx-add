@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# git-ctx-add: Add a todo item
+# dx-ctx-add: Add a todo item
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 task="$*"
 if [ -z "$task" ]; then

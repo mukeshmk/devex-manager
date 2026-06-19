@@ -11,7 +11,7 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
+CTX_TOOLS_DIR="$INSTALL_DIR/dx-ctx-tools"
 DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
 DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
@@ -86,38 +86,35 @@ fetch_file "dx-nb-tools/dx-nb-diff" "$DX_NB_TOOLS_DIR/dx-nb-diff"
 fetch_file "dx-nb-tools/dx-nb-kernel" "$DX_NB_TOOLS_DIR/dx-nb-kernel"
 fetch_file "dx-nb-tools/dx-nb-list" "$DX_NB_TOOLS_DIR/dx-nb-list"
 
-# Ask if user wants to install git-ctx
-INSTALL_GIT_CTX=false
-echo -e "\n${YELLOW}Would you like to install the git-ctx (Developer Context Manager) tools?${NC}"
+# Ask if user wants to install dx-ctx
+INSTALL_DX_CTX=false
+echo -e "\n${YELLOW}Would you like to install the dx-ctx (Developer Context Manager) tools?${NC}"
 read -p "(y/n) " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    INSTALL_GIT_CTX=true
+    INSTALL_DX_CTX=true
 fi
 
-if [ "$INSTALL_GIT_CTX" = true ]; then
+if [ "$INSTALL_DX_CTX" = true ]; then
     mkdir -p "$CTX_TOOLS_DIR"
-    fetch_file "git-ctx" "$INSTALL_DIR/git-ctx"
+    fetch_file "dx-ctx-tools/dx-ctx" "$CTX_TOOLS_DIR/dx-ctx"
 
     echo "Installing context sub-commands to $CTX_TOOLS_DIR..."
-    fetch_file "git-ctx-tools/git-ctx-helper.sh" "$CTX_TOOLS_DIR/git-ctx-helper.sh"
-    fetch_file "git-ctx-tools/git-ctx-show" "$CTX_TOOLS_DIR/git-ctx-show"
-    fetch_file "git-ctx-tools/git-ctx-edit" "$CTX_TOOLS_DIR/git-ctx-edit"
-    fetch_file "git-ctx-tools/git-ctx-add" "$CTX_TOOLS_DIR/git-ctx-add"
-    fetch_file "git-ctx-tools/git-ctx-done" "$CTX_TOOLS_DIR/git-ctx-done"
-    fetch_file "git-ctx-tools/git-ctx-undo" "$CTX_TOOLS_DIR/git-ctx-undo"
-    fetch_file "git-ctx-tools/git-ctx-rm" "$CTX_TOOLS_DIR/git-ctx-rm"
-    fetch_file "git-ctx-tools/git-ctx-clear" "$CTX_TOOLS_DIR/git-ctx-clear"
-    fetch_file "git-ctx-tools/git-ctx-clean" "$CTX_TOOLS_DIR/git-ctx-clean"
-    fetch_file "git-ctx-tools/git-ctx-todo" "$CTX_TOOLS_DIR/git-ctx-todo"
+    fetch_file "dx-ctx-tools/dx-ctx-helper.sh" "$CTX_TOOLS_DIR/dx-ctx-helper.sh"
+    fetch_file "dx-ctx-tools/dx-ctx-show" "$CTX_TOOLS_DIR/dx-ctx-show"
+    fetch_file "dx-ctx-tools/dx-ctx-edit" "$CTX_TOOLS_DIR/dx-ctx-edit"
+    fetch_file "dx-ctx-tools/dx-ctx-add" "$CTX_TOOLS_DIR/dx-ctx-add"
+    fetch_file "dx-ctx-tools/dx-ctx-done" "$CTX_TOOLS_DIR/dx-ctx-done"
+    fetch_file "dx-ctx-tools/dx-ctx-undo" "$CTX_TOOLS_DIR/dx-ctx-undo"
+    fetch_file "dx-ctx-tools/dx-ctx-rm" "$CTX_TOOLS_DIR/dx-ctx-rm"
+    fetch_file "dx-ctx-tools/dx-ctx-clear" "$CTX_TOOLS_DIR/dx-ctx-clear"
+    fetch_file "dx-ctx-tools/dx-ctx-clean" "$CTX_TOOLS_DIR/dx-ctx-clean"
+    fetch_file "dx-ctx-tools/dx-ctx-todo" "$CTX_TOOLS_DIR/dx-ctx-todo"
 fi
 
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
 fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
 fetch_file "dx-completion.sh" "$WT_TOOLS_DIR/dx-completion.sh"
-if [ "$INSTALL_GIT_CTX" = true ]; then
-    fetch_file "git-ctx-completion.sh" "$WT_TOOLS_DIR/git-ctx-completion.sh"
-fi
 
 # 3. Make the scripts executable
 chmod +x "$INSTALL_DIR/git-wt"
@@ -127,10 +124,10 @@ chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
 chmod +x "$DX_SKILLS_TOOLS_DIR"/dx-*
 chmod +x "$DX_NB_TOOLS_DIR"/dx-*
 
-if [ "$INSTALL_GIT_CTX" = true ]; then
-    chmod +x "$INSTALL_DIR/git-ctx"
-    chmod +x "$CTX_TOOLS_DIR"/git-ctx-*
-    chmod +x "$CTX_TOOLS_DIR/git-ctx-helper.sh"
+if [ "$INSTALL_DX_CTX" = true ]; then
+    chmod +x "$CTX_TOOLS_DIR"/dx-ctx-*
+    chmod +x "$CTX_TOOLS_DIR/dx-ctx"
+    chmod +x "$CTX_TOOLS_DIR/dx-ctx-helper.sh"
 fi
 
 # 4. Optional: Install Git Aliases
@@ -215,15 +212,9 @@ if [ -n "$SHELL_RC" ]; then
         
         add_to_devex_block "source \"$WT_TOOLS_DIR/git-wt-completion.sh\""
         add_to_devex_block "source \"$WT_TOOLS_DIR/dx-completion.sh\""
-        if [ "$INSTALL_GIT_CTX" = true ]; then
-            add_to_devex_block "source \"$WT_TOOLS_DIR/git-ctx-completion.sh\""
-        fi
     else
-        # Make sure git-ctx-completion and dx-completion are loaded if others were already configured
+        # Make sure dx-completion is loaded if others were already configured
         add_to_devex_block "source \"$WT_TOOLS_DIR/dx-completion.sh\""
-        if [ "$INSTALL_GIT_CTX" = true ]; then
-            add_to_devex_block "source \"$WT_TOOLS_DIR/git-ctx-completion.sh\""
-        fi
         echo -e "Auto-completion already configured in $(basename "$SHELL_RC")."
     fi
 

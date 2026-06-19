@@ -11,7 +11,7 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-CTX_TOOLS_DIR="$INSTALL_DIR/git-ctx-tools"
+CTX_TOOLS_DIR="$INSTALL_DIR/dx-ctx-tools"
 DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
 DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
@@ -43,9 +43,7 @@ fi
 
 if [ -f "$INSTALL_DIR/git-ctx" ]; then
     rm "$INSTALL_DIR/git-ctx"
-    echo "  ✓ Removed git-ctx script"
-else
-    echo "  - git-ctx script not found"
+    echo "  ✓ Removed legacy git-ctx script"
 fi
 
 if [ -f "$INSTALL_DIR/dx" ]; then
@@ -66,9 +64,9 @@ fi
 
 if [ -d "$CTX_TOOLS_DIR" ]; then
     rm -rf "$CTX_TOOLS_DIR"
-    echo "  ✓ Removed git-ctx-tools directory"
+    echo "  ✓ Removed dx-ctx-tools directory"
 else
-    echo "  - git-ctx-tools directory not found"
+    echo "  - dx-ctx-tools directory not found"
 fi
 
 if [ -d "$DX_SKILLS_TOOLS_DIR" ]; then

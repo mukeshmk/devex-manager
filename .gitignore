@@ -16,3 +16,13 @@
 # Antigravity Files
 ANTIGRAVITY.md
 .antigravitycli
+
+# Kiro
+.kiro
+
+# Claude
+.claude
+CLAUDE.md
+
+# Tests
+tests/

@@ -10,6 +10,7 @@ COMMAND="$1"
 ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 SKILLS_TOOLS_DIR="$ROUTER_DIR/dx-skills-tools"
 NB_TOOLS_DIR="$ROUTER_DIR/dx-nb-tools"
+CTX_TOOLS_DIR="$ROUTER_DIR/dx-ctx-tools"
 
 BLUE='\033[0;34m'
 NC='\033[0m'
@@ -21,6 +22,9 @@ case "$COMMAND" in
     nb)
         "$NB_TOOLS_DIR/dx-nb" "$@"
         ;;
+    ctx)
+        "$CTX_TOOLS_DIR/dx-ctx" "$@"
+        ;;
     *)
         echo -e "${BLUE}DevEx Manager (dx)${NC}"
         echo "Usage: dx <command> [arguments]"
@@ -28,6 +32,7 @@ case "$COMMAND" in
         echo "Available commands:"
         echo "  skills  - Sync, list, and manage AI agent skills"
         echo "  nb      - Jupyter Notebook utilities (strip, diff, kernel, list)"
+        echo "  ctx     - Developer context checklist & scratchpad"
         echo ""
         exit 1
         ;;

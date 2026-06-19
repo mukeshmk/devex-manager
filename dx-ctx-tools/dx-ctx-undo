@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# git-ctx-done: Check off a todo item
+# dx-ctx-undo: Uncheck a todo item
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 target_idx="$1"
 if [ -z "$target_idx" ]; then
-    echo -e "${RED}Error: Specify a todo index to check.${NC}"
+    echo -e "${RED}Error: Specify a todo index to uncheck.${NC}"
     exit 1
 fi
 
@@ -21,11 +21,11 @@ current_line=0
 while IFS= read -r line || [[ -n "$line" ]]; do
     ((current_line++))
     if [ $current_line -eq $line_num ]; then
-        modified_line=$(echo "$line" | sed -E 's/\[ \]/\[x\]/')
+        modified_line=$(echo "$line" | sed -E 's/\[[xX]\]/\[ \]/')
         echo "$modified_line" >> "$temp_file"
     else
         echo "$line" >> "$temp_file"
     fi
 done < "$ctx_file"
 mv "$temp_file" "$ctx_file"
-echo -e "${GREEN}✓ Checked task $target_idx.${NC}"
+echo -e "${GREEN}✓ Unchecked task $target_idx.${NC}"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# git-ctx-rm: Delete a todo item
+# dx-ctx-rm: Delete a todo item
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 target_idx="$1"
 if [ -z "$target_idx" ]; then

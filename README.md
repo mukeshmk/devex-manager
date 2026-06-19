@@ -1,12 +1,12 @@
 # DevEx Manager — Developer Experience Tools
 
-A collection of lightweight CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `dx nb` for Jupyter Notebook utilities, `git ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
+A collection of lightweight CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `dx nb` for Jupyter Notebook utilities, `dx ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
 
 ## Key Features
 
 - **`git wt` (Worktree Manager):** Simplify working with bare repositories and multiple worktrees.
 - **`dx nb` (Notebook Utilities):** Essential tools for AI/ML developers to manage Jupyter Notebooks and kernels.
-- **`git ctx` (Context Manager):** Local, untracked todo checklists and scratchpad notes per branch.
+- **`dx ctx` (Context Manager):** Local, untracked todo checklists and scratchpad notes per branch.
 - **`dx skills` (Prompt Skill Sync Manager):** Bidirectionally synchronize prompt skill folders across multiple AI tools (Claude Code, Kiro, Antigravity, etc.) using a central Master folder.
 - **Python Auto-Venv:** Transparent activation/deactivation of `.venv`, proactive initialization using `uv`, and stale worktree detection.
 - **Git Aliases:** High-productivity shortcuts for common Git operations.
@@ -32,7 +32,7 @@ bash install.sh
 ```
 
 ### What the installer does:
-1. Downloads/Copies `git-wt`, `git-ctx`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
+1. Downloads/Copies `git-wt`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
 2. Makes all scripts executable
 3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases)
 4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv)
@@ -114,20 +114,20 @@ Running `git wt sync` aligns these files across all active worktrees using a fil
 
 ---
 
-## git-ctx — Developer Context Manager
+## dx-ctx — Developer Context Manager
 
-`git ctx` provides local, untracked todo checklists and scratchpad notes specific to your active branch. This data is stored in the repository's `.git/info/devex/contexts/` directory so it stays private to your computer and never gets committed or pushed.
+`dx ctx` provides local, untracked todo checklists and scratchpad notes specific to your active branch. This data is stored in the repository's `.git/info/devex/contexts/` directory so it stays private to your computer and never gets committed or pushed.
 
 ### Commands
 
-- **`git ctx [show]`**: Display the notes and checklist for the current branch.
-- **`git ctx edit`**: Open the current branch's notes in your default terminal editor (`$EDITOR`).
-- **`git ctx add <task>`**: Quick shortcut to append a new todo item to the checklist.
-- **`git ctx done <index>`**: Mark a checklist item as completed.
-- **`git ctx undo <index>`**: Mark a completed checklist item as pending.
-- **`git ctx rm <index>`**: Delete a checklist item.
-- **`git ctx clean`**: Interactively detect and remove context files for local branches that have already been deleted.
-- **`git ctx todo [list|add|done|undo|rm|clear]`**: Detailed subcommand interface for managing checklist items.
+- **`dx ctx [show]`**: Display the notes and checklist for the current branch.
+- **`dx ctx edit`**: Open the current branch's notes in your default terminal editor (`$EDITOR`).
+- **`dx ctx add <task>`**: Quick shortcut to append a new todo item to the checklist.
+- **`dx ctx done <index>`**: Mark a checklist item as completed.
+- **`dx ctx undo <index>`**: Mark a completed checklist item as pending.
+- **`dx ctx rm <index>`**: Delete a checklist item.
+- **`dx ctx clean`**: Interactively detect and remove context files for local branches that have already been deleted.
+- **`dx ctx todo [list|add|done|undo|rm|clear]`**: Detailed subcommand interface for managing checklist items.
 
 ---
 

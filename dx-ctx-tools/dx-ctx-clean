@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# git-ctx-clean: Delete notes for deleted local branches
+# dx-ctx-clean: Delete notes for deleted local branches
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 if [ ! -d "$ctx_dir" ]; then
     echo -e "${YELLOW}No contexts folder found.${NC}"

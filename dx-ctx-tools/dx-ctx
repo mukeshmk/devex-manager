@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-# DevEx Manager: git-ctx (Git Branch/Worktree Context Router)
+# DevEx Manager: dx-ctx (Branch/Worktree Context Router)
 set -e
 
 # Locate tools relative to this script
 ROUTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-TOOLS_DIR="$ROUTER_DIR/git-ctx-tools"
+TOOLS_DIR="$ROUTER_DIR"
 
 # Source shared library for colors & initial verification
-source "$TOOLS_DIR/git-ctx-helper.sh"
+source "$TOOLS_DIR/dx-ctx-helper.sh"
 
 show_help() {
-    echo -e "${BLUE}DevEx Manager (git ctx)${NC}"
-    echo "Usage: git ctx [command] [arguments]"
+    echo -e "${BLUE}DevEx Manager (dx ctx)${NC}"
+    echo "Usage: dx ctx [command] [arguments]"
     echo ""
     echo "Branch-specific scratchpad and todo checklists."
     echo ""
@@ -41,36 +41,36 @@ shift || true
 
 case "$COMMAND" in
     show)
-        "$TOOLS_DIR/git-ctx-show" "$@"
+        "$TOOLS_DIR/dx-ctx-show" "$@"
         ;;
     edit)
-        "$TOOLS_DIR/git-ctx-edit" "$@"
+        "$TOOLS_DIR/dx-ctx-edit" "$@"
         ;;
     add)
-        "$TOOLS_DIR/git-ctx-add" "$@"
+        "$TOOLS_DIR/dx-ctx-add" "$@"
         ;;
     done)
-        "$TOOLS_DIR/git-ctx-done" "$@"
+        "$TOOLS_DIR/dx-ctx-done" "$@"
         ;;
     undo)
-        "$TOOLS_DIR/git-ctx-undo" "$@"
+        "$TOOLS_DIR/dx-ctx-undo" "$@"
         ;;
     rm)
-        "$TOOLS_DIR/git-ctx-rm" "$@"
+        "$TOOLS_DIR/dx-ctx-rm" "$@"
         ;;
     clean)
-        "$TOOLS_DIR/git-ctx-clean" "$@"
+        "$TOOLS_DIR/dx-ctx-clean" "$@"
         ;;
     help|-h|--help)
         show_help
         ;;
     todo)
-        "$TOOLS_DIR/git-ctx-todo" "$@"
+        "$TOOLS_DIR/dx-ctx-todo" "$@"
         ;;
     *)
         # If unknown command, treat it as 'todo add' with command as the first word
         if [ -n "$COMMAND" ]; then
-            "$TOOLS_DIR/git-ctx-add" "$COMMAND" "$@"
+            "$TOOLS_DIR/dx-ctx-add" "$COMMAND" "$@"
         else
             show_help
             exit 1

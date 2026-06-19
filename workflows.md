@@ -131,21 +131,21 @@ stateDiagram-v2
 
 ---
 
-## 4. git ctx — Developer Context Manager
+## 4. dx ctx — Developer Context Manager
 
 ```mermaid
 graph TD
-    A[git ctx show] --> B{Context file exists?}
+    A[dx ctx show] --> B{Context file exists?}
     B -- "No" --> C[Initialize .git/info/devex/contexts/branch.md]
     B -- "Yes" --> D[Read & parse markdown checklist]
     C --> D
     D --> E[Print Checklist & Notes to terminal]
     
-    F[git ctx done 1] --> G[Locate task in markdown file]
+    F[dx ctx done 1] --> G[Locate task in markdown file]
     G --> H[Replace [ ] with [x]]
     H --> E
     
-    I[git ctx clean] --> J[Scan contexts folder]
+    I[dx ctx clean] --> J[Scan contexts folder]
     J --> K{Branch still exists?}
     K -- "No" --> L[List as Orphan]
     K -- "Yes" --> M[Skip]

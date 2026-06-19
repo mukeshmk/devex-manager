@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# git-ctx-clear: Purge completed todo items
+# dx-ctx-clear: Purge completed todo items
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 temp_file=$(mktemp)
 in_todos=false

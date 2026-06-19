@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# git-ctx-edit: Open context file in default editor
+# dx-ctx-edit: Open context file in default editor
 HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-source "$HELPER_DIR/git-ctx-helper.sh"
+source "$HELPER_DIR/dx-ctx-helper.sh"
 
 editor="${EDITOR:-}"
 if [ -z "$editor" ]; then
