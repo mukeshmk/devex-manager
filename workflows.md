@@ -44,6 +44,36 @@ graph LR
 
 **Key Benefit:** Eliminates `git stash` and context switching. Each branch has its own directory and persistent IDE state.
 
+### Configuration Copies Sync
+
+When configuration paths are copied instead of symlinked across worktrees, their states drift over time. The `git wt sync` command solves this by running a bidirectional, file-level synchronization:
+
+```mermaid
+flowchart TD
+    Run([Run git wt sync]) --> LockCheck{Conflict markers in main?}
+    LockCheck -- Yes --> Block[Abort Sync with error]
+    LockCheck -- No --> ScanWTs[Scan active worktrees & manifest]
+    ScanWTs --> EvalRules{Evaluate rules per file}
+    
+    EvalRules -- "Untouched everywhere" --> Skip[Skip file]
+    EvalRules -- "Modified in Main or single WT" --> SilentlyPropagate[Propagate changes to all worktrees]
+    EvalRules -- "Deleted in Main or single WT" --> SilentlyDel[Delete from WTs or prompt to delete/restore]
+    EvalRules -- "Conflict (Main vs WT or WT vs WT)" --> PromptUser[Prompt user for choice]
+    
+    PromptUser -- "Keep Main version" --> OverwriteWT[Overwrite WT with Main version]
+    PromptUser -- "Keep WT version" --> OverwriteMain[Overwrite Main and fan out to all WTs]
+    PromptUser -- "Resolve Later" --> ConflictMarkers[Create *.devex-conflict-* marker file in main]
+    
+    OverwriteWT --> RebuildManifest[Rebuild sync manifest]
+    OverwriteMain --> RebuildManifest
+    ConflictMarkers --> RebuildManifest
+    SilentlyPropagate --> RebuildManifest
+    SilentlyDel --> RebuildManifest
+    Skip --> RebuildManifest
+    
+    RebuildManifest --> End([Synchronization Complete])
+```
+
 ---
 
 ## 2. dx nb — Notebook Utilities

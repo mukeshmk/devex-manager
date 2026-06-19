@@ -54,6 +54,7 @@ A lightweight CLI tool that wraps `git worktree` to simplify working with bare r
 - **`git wt clean`**: Interactively find and remove stale worktrees that have already been merged.
 - **`git wt status`**: Show a rich status overview of all active worktrees, including sync status and uncommitted changes.
 - **`git wt rm <folder-name-or-branch-name>`**: Safely removes a worktree folder and deletes its associated local branch.
+- **`git wt sync`**: Synchronizes configured `copies.paths` across all active worktrees using the main worktree as the central hub. Uses file-level modification times to automatically propagate additions, deletions, and modifications. Prompts for conflict resolution in interactive mode or creates conflict marker files when updates are incompatible.
 
 ### Configuration (`.devex.conf`)
 
@@ -66,16 +67,33 @@ main_worktree_name = main
 
 [symlinks]
 # Files or folders to symlink into every new worktree
-paths = .claude,.kiro,.vscode
+paths =
 
 [copies]
-# Files or folders to copy into every new worktree
-paths = .env
+# Files or folders to copy into every new worktree (synchronized via git wt sync)
+paths = .claude,.kiro,.vscode,.env
 
 [worktree]
 # Strategies: ticket-prefix (default), full-branch, or custom
 naming_strategy = ticket-prefix
 ```
+
+### Configuration Copy & Synchronization (`git wt sync`)
+
+Unlike symlinks, which share the exact same underlying file, configuration copies are independent files copied into each worktree (e.g. separate `.vscode/settings.json` or `.env` files). Over time, these copies can drift. 
+
+Running `git wt sync` aligns these files across all active worktrees using a file-level bidirectional synchronization system.
+
+#### How it works:
+1. **Manifest-Based Tracking**: The tool maintains a state manifest at `$(git rev-parse --git-common-dir)/info/devex/sync-manifest`. Each entry tracks the file path, modification time (`mtime`), and size at the time of the last sync.
+2. **Lock Detection**: To prevent synchronization loops and preserve un-merged changes, `git wt sync` automatically blocks execution if any unresolved conflict files (`*.devex-conflict-*`) are present in the main worktree.
+3. **Change Detection**: It scans all active worktrees and compares current states against the manifest to group files into additions, modifications, or deletions since the last sync.
+4. **Bidirectional Propagation**:
+   - **Silently propagated**: Modifications/additions in the main worktree are sent to feature worktrees. Modifications/additions in a single feature worktree are pulled into the main worktree and fanned out.
+   - **Interactive Conflict Resolution**: If a file is modified in both the main worktree and a feature worktree (or modified differently in multiple feature worktrees), the tool prompts the user:
+     - **Keep Main version**: Overwrites the feature worktree's version with the main version.
+     - **Keep Feature version**: Overwrites the main version and fans it out to all other worktrees.
+     - **Resolve Later (Default)**: Leaves the main file untouched and creates a named conflict marker file (e.g., `[filename].devex-conflict-[worktree]`) in the main worktree.
 
 ---
 
