@@ -19,6 +19,7 @@ case "$COMMAND" in
     rm)     "$TOOLS_DIR/git-wt-rm" "$@" ;;
     clean)  "$TOOLS_DIR/git-wt-clean" "$@" ;;
     status) "$TOOLS_DIR/git-wt-status" "$@" ;;
+    sync)   "$TOOLS_DIR/git-wt-sync" "$@" ;;
 
     # Pass-through to native git worktree
     lock|move|prune|repair|unlock)
@@ -43,6 +44,7 @@ case "$COMMAND" in
         echo "  rm      - Delete worktree folder & local branch"
         echo "  clean   - Interactively remove stale worktrees"
         echo "  status  - Rich status overview (alias: list)"
+        echo "  sync    - Synchronize configuration copies (supports: --force, -f)"
         echo ""
         echo "Native Git Commands Pass-through:"
         echo "  lock, move, prune, repair, unlock"

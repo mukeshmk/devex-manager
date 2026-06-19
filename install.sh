@@ -67,6 +67,7 @@ fetch_file "git-wt-tools/git-wt-add" "$WT_TOOLS_DIR/git-wt-add"
 fetch_file "git-wt-tools/git-wt-rm" "$WT_TOOLS_DIR/git-wt-rm"
 fetch_file "git-wt-tools/git-wt-clean" "$WT_TOOLS_DIR/git-wt-clean"
 fetch_file "git-wt-tools/git-wt-status" "$WT_TOOLS_DIR/git-wt-status"
+fetch_file "git-wt-tools/git-wt-sync" "$WT_TOOLS_DIR/git-wt-sync"
 fetch_file "git-wt-tools/devex-lib.sh" "$WT_TOOLS_DIR/devex-lib.sh"
 
 echo "Installing dx skills tools to $DX_SKILLS_TOOLS_DIR..."
