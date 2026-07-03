@@ -55,7 +55,7 @@ for ((i=0; i<${#dirs[@]}; i++)); do
     
     # Backup
     mkdir -p "$BACKUP_ROOT/$name"
-    cp -R "$d" "$BACKUP_ROOT/$name/$s"
+    cp -Rp "$d" "$BACKUP_ROOT/$name/$s"
     
     # Delete
     rm -rf "$d"

@@ -142,7 +142,7 @@ if [ -d "$MAIN_WORKTREE" ] && [ -n "$DEVEX_COPY_PATHS" ]; then
         [ -z "$p" ] && continue
         if [ -e "$MAIN_WORKTREE/$p" ]; then
             echo "  Copying $p..."
-            cp -R "$MAIN_WORKTREE/$p" "$NEW_WORKTREE/$p"
+            cp -Rp "$MAIN_WORKTREE/$p" "$NEW_WORKTREE/$p"
         fi
     done
 elif [ ! -d "$MAIN_WORKTREE" ] && [ -n "$DEVEX_COPY_PATHS" ]; then

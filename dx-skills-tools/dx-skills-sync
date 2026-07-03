@@ -113,7 +113,7 @@ for action in "${PENDING_UPDATES[@]}"; do
     if [ -d "$dest_dir" ]; then
         b_dir="$BACKUP_ROOT/$dest_name"
         mkdir -p "$b_dir"
-        cp -R "$dest_dir" "$b_dir/$s"
+        cp -Rp "$dest_dir" "$b_dir/$s"
     fi
     
     # Sync via rsync
