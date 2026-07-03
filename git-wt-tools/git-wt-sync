@@ -11,6 +11,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/devex-lib.sh"
 
+# Parse arguments
+CHECK_ONLY=false
+for arg in "$@"; do
+    case "$arg" in
+        --check|-c)
+            CHECK_ONLY=true
+            ;;
+    esac
+done
+
 # Colors for output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -232,8 +242,14 @@ if [ ${#REL_FILES[@]} -gt 0 ]; then
     REL_FILES=("${sorted[@]}")
 fi
 
-echo -e "${BLUE}Synchronizing configuration copies...${NC}"
+if [ "$CHECK_ONLY" = true ]; then
+    echo -e "${BLUE}Checking sync status of configuration copies...${NC}"
+else
+    echo -e "${BLUE}Synchronizing configuration copies...${NC}"
+fi
 echo -e "Main worktree: ${GREEN}$(basename "$MAIN_WORKTREE")${NC}"
+
+ANY_OUT_OF_SYNC=false
 
 # Loop through each file and apply rules
 for f in "${REL_FILES[@]}"; do
@@ -307,7 +323,36 @@ for f in "${REL_FILES[@]}"; do
     done
 
     # Rule Evaluation
-    if [ "$main_deleted" = true ]; then
+    if [ "$CHECK_ONLY" = true ]; then
+        file_out_of_sync=false
+        if [ "$main_deleted" = true ] || [ ${#deleting_wts[@]} -gt 0 ] || [ "$exists_in_main" = false ] || [ "$main_modified" = true ] || [ ${#modifying_wts[@]} -gt 0 ] || [ ${#missing_wts[@]} -gt 0 ]; then
+            file_out_of_sync=true
+            ANY_OUT_OF_SYNC=true
+        fi
+        
+        if [ "$file_out_of_sync" = true ]; then
+            echo -e "${YELLOW}Out of sync: $f${NC}"
+            if [ "$main_deleted" = true ]; then
+                echo "    - Deleted in main worktree"
+            fi
+            if [ ${#deleting_wts[@]} -gt 0 ]; then
+                echo "    - Deleted in: $(for w in "${deleting_wts[@]}"; do basename "$w"; done | xargs)"
+            fi
+            if [ "$exists_in_main" = false ]; then
+                echo "    - New file in: $(for w in "${modifying_wts[@]}"; do basename "$w"; done | xargs)"
+            fi
+            if [ "$main_modified" = true ]; then
+                echo "    - Modified in main worktree"
+            fi
+            if [ ${#modifying_wts[@]} -gt 0 ] && [ "$exists_in_main" = true ]; then
+                echo "    - Modified in: $(for w in "${modifying_wts[@]}"; do basename "$w"; done | xargs)"
+            fi
+            if [ ${#missing_wts[@]} -gt 0 ]; then
+                echo "    - Missing in: $(for w in "${missing_wts[@]}"; do basename "$w"; done | xargs)"
+            fi
+        fi
+    else
+        if [ "$main_deleted" = true ]; then
         # File was deleted in main since last sync
         if [ ${#modifying_wts[@]} -eq 0 ]; then
             # Delete silently from untouched WTs
@@ -539,7 +584,18 @@ for f in "${REL_FILES[@]}"; do
             fi
         fi
     fi
+fi
 done
+
+if [ "$CHECK_ONLY" = true ]; then
+    if [ "$ANY_OUT_OF_SYNC" = true ]; then
+        echo -e "\n${RED}Configuration files are not in sync.${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✓ Everything is in sync.${NC}"
+        exit 0
+    fi
+fi
 
 # Rebuild manifest from final main worktree files
 echo -e "${GREEN}Rebuilding sync manifest...${NC}"

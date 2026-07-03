@@ -35,6 +35,15 @@ if [ -n "$_GIT_DIR" ]; then
     devex_load_config "$_REPO_ROOT"
 fi
 
+# Check if configuration copies are in sync before removing
+if [ -f "$SCRIPT_DIR/git-wt-sync" ]; then
+    if ! bash "$SCRIPT_DIR/git-wt-sync" --check; then
+        echo -e "${RED}Error: Cannot remove worktree while files are not in sync.${NC}"
+        echo -e "Please run ${YELLOW}git wt sync${NC} to synchronize before deleting any worktrees."
+        exit 1
+    fi
+fi
+
 # 1. Ask Git for all worktrees and figure out the exact path and branch name
 WORKTREE_PATH=""
 BRANCH_NAME="$TARGET" # Assume the target is the branch name by default

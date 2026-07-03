@@ -51,10 +51,10 @@ A lightweight CLI tool that wraps `git worktree` to simplify working with bare r
 
 - **`git wt clone <url>`**: Clones a repository as a bare repo and sets up an initial `main` worktree.
 - **`git wt add <branch-name> [custom-folder-name]`**: Creates a new worktree (or checks out an existing branch) using a short folder name derived from the branch.
-- **`git wt clean`**: Interactively find and remove stale worktrees that have already been merged.
+- **`git wt clean`**: Interactively find and remove stale worktrees that have already been merged. **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing any deletions, and aborts if they are out of sync.
 - **`git wt status`**: Show a rich status overview of all active worktrees, including sync status and uncommitted changes.
-- **`git wt rm <folder-name-or-branch-name>`**: Safely removes a worktree folder and deletes its associated local branch.
-- **`git wt sync`**: Synchronizes configured `copies.paths` across all active worktrees using the main worktree as the central hub. Uses file-level modification times to automatically propagate additions, deletions, and modifications. Prompts for conflict resolution in interactive mode or creates conflict marker files when updates are incompatible.
+- **`git wt rm <folder-name-or-branch-name>`**: Safely removes a worktree folder and deletes its associated local branch. **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing deletion, and aborts if they are out of sync.
+- **`git wt sync`**: Synchronizes configured `copies.paths` across all active worktrees using the main worktree as the central hub. Uses file-level modification times to automatically propagate additions, deletions, and modifications. Prompts for conflict resolution in interactive mode or creates conflict marker files when updates are incompatible. Supports checking sync status without applying changes via the `--check` (or `-c`) flag.
 
 ### Configuration (`.devex.conf`)
 
@@ -94,6 +94,11 @@ Running `git wt sync` aligns these files across all active worktrees using a fil
      - **Keep Main version**: Overwrites the feature worktree's version with the main version.
      - **Keep Feature version**: Overwrites the main version and fans it out to all other worktrees.
      - **Resolve Later (Default)**: Leaves the main file untouched and creates a named conflict marker file (e.g., `[filename].devex-conflict-[worktree]`) in the main worktree.
+5. **Sync Checking (Dry-Run)**: Running `git wt sync --check` (or `-c`) performs a check of all configuration files against the manifest and other worktrees. It identifies and lists any out-of-sync files, exiting with status `1` (or `0` if all files are in sync) without performing any writes.
+
+#### Worktree Deletion Guard
+
+To prevent accidental loss of configuration modifications made inside worktrees, all commands that delete or clean worktrees (`git wt clean` and `git wt rm`) automatically check if configuration copies are synchronized across all worktrees. If they are not in sync, the command will print details about the out-of-sync files, suggest running `git wt sync`, and abort the deletion.
 
 ---
 
