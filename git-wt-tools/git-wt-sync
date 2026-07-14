@@ -95,10 +95,47 @@ if [ -z "$MAIN_WORKTREE" ]; then
     fi
 fi
 
-# Lock Detection: Scan main worktree for conflict files
-conflicts=$(find "$MAIN_WORKTREE" -name "*.devex-conflict-*" 2>/dev/null || true)
+# Lock Detection: Scan main worktree for conflict files, ignoring symlinked paths and .git
+find_args=( -name ".git" )
+if [ -n "$DEVEX_SYMLINK_PATHS" ]; then
+    IFS=',' read -ra sym_paths <<< "$DEVEX_SYMLINK_PATHS"
+    IFS=',' read -ra copy_paths <<< "$DEVEX_COPY_PATHS"
+    for p in "${sym_paths[@]}"; do
+        p="${p#"${p%%[![:space:]]*}"}" # trim leading space
+        p="${p%"${p##*[![:space:]]}"}" # trim trailing space
+        [ -z "$p" ] && continue
+        
+        is_copy=false
+        for cp in "${copy_paths[@]}"; do
+            cp="${cp#"${cp%%[![:space:]]*}"}"
+            cp="${cp%"${cp##*[![:space:]]}"}"
+            if [ "$p" = "$cp" ]; then
+                is_copy=true
+                break
+            fi
+        done
+        
+        if [ "$is_copy" = false ]; then
+            base_p=$(basename "$p")
+            find_args+=( -o -name "$base_p" )
+        fi
+    done
+fi
+
+conflicts=$(find "$MAIN_WORKTREE" \( "${find_args[@]}" \) -prune -o -name "*.devex-conflict-*" -print 2>/dev/null || true)
 if [ -n "$conflicts" ]; then
     echo -e "${RED}Sync blocked: Unresolved conflicts detected. Resolve the files, delete the conflict markers, and try again.${NC}" >&2
+    echo -e "${YELLOW}Unresolved conflict files:${NC}" >&2
+    echo "$conflicts" | while read -r conflict_file; do
+        if [ -n "$conflict_file" ]; then
+            if [[ "$conflict_file" == "$REPO_ROOT"* ]]; then
+                rel_path="${conflict_file#"$REPO_ROOT"/}"
+                echo -e "  - $rel_path (at: $conflict_file)" >&2
+            else
+                echo -e "  - $conflict_file" >&2
+            fi
+        fi
+    done
     exit 1
 fi
 

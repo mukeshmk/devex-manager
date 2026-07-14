@@ -41,7 +41,7 @@ case "$COMMAND" in
         echo "Available commands:"
         echo "  clone   - Initialize bare repo & main worktree"
         echo "  add     - Create/checkout worktree (by branch prefix)"
-        echo "  rm      - Delete worktree folder & local branch"
+        echo "  rm      - Delete worktree folder & local branch (supports: --force, -f)"
         echo "  clean   - Interactively remove stale worktrees"
         echo "  status  - Rich status overview (alias: list)"
         echo "  sync    - Synchronize configuration copies (supports: --force, -f)"
