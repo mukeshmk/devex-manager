@@ -139,35 +139,24 @@ if [ -n "$conflicts" ]; then
     exit 1
 fi
 
-# Helpers to get modification times and file sizes
-get_mtime() {
+# Helpers to get modification times and file sizes in a single process call
+get_mtime_and_size() {
     local path="$1"
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        stat -f "%m" "$path" 2>/dev/null || echo 0
+        stat -f "%m %z" "$path" 2>/dev/null || echo "0 0"
     else
-        stat -c "%Y" "$path" 2>/dev/null || echo 0
+        stat -c "%Y %s" "$path" 2>/dev/null || echo "0 0"
     fi
 }
 
-get_size() {
-    local path="$1"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        stat -f "%z" "$path" 2>/dev/null || echo 0
-    else
-        stat -c "%s" "$path" 2>/dev/null || echo 0
-    fi
-}
-
-# Recursively lists relative file paths under wt for path p
+# Recursively lists relative file paths under wt for path p (subshell find for speed)
 get_relative_files() {
     local wt="$1"
     local p="$2"
     if [ -f "$wt/$p" ]; then
         echo "$p"
     elif [ -d "$wt/$p" ]; then
-        find "$wt/$p" -type f 2>/dev/null | while read -r f; do
-            echo "${f#"$wt/"}"
-        done
+        (cd "$wt" && find "$p" -type f 2>/dev/null)
     fi
 }
 
@@ -241,7 +230,7 @@ prompt_multi_wt_conflict() {
 if [ -f "$MANIFEST_FILE" ]; then
     while IFS='|' read -r rel_path mtime size || [ -n "$rel_path" ]; do
         [ -z "$rel_path" ] && continue
-        safe_name=$(echo "$rel_path" | tr -c 'a-zA-Z0-9' '_')
+        safe_name="${rel_path//[^a-zA-Z0-9]/_}"
         eval "MANIFEST_MTIME_$safe_name=\"\$mtime\""
         eval "MANIFEST_SIZE_$safe_name=\"\$size\""
     done < "$MANIFEST_FILE"
@@ -257,26 +246,25 @@ for wt in "${ACTIVE_WORKTREES[@]}"; do
         p="${p%"${p##*[![:space:]]}"}"
         [ -z "$p" ] && continue
         
-        while read -r rel_f; do
-            [ -z "$rel_f" ] && continue
-            # Avoid duplicates
-            if [[ ! " $REL_FILES_STR " == *" $rel_f "* ]]; then
-                REL_FILES_STR="$REL_FILES_STR $rel_f"
+        files_wt=$(get_relative_files "$wt" "$p")
+        if [ -n "$files_wt" ]; then
+            if [ -z "$REL_FILES_STR" ]; then
+                REL_FILES_STR="$files_wt"
+            else
+                REL_FILES_STR="$REL_FILES_STR"$'\n'"$files_wt"
             fi
-        done <<< "$(get_relative_files "$wt" "$p")"
+        fi
     done
 done
 
-# Convert to sorted array
+# Convert to sorted unique array (deduplicate and sort in one go)
 REL_FILES=()
-for f in $REL_FILES_STR; do
-    REL_FILES+=("$f")
-done
-
-if [ ${#REL_FILES[@]} -gt 0 ]; then
-    IFS=$'\n' sorted=($(sort <<< "${REL_FILES[*]}"))
+if [ -n "$REL_FILES_STR" ]; then
+    IFS=$'\n' sorted=($(echo "$REL_FILES_STR" | sort -u))
     unset IFS
-    REL_FILES=("${sorted[@]}")
+    for f in "${sorted[@]}"; do
+        [ -n "$f" ] && REL_FILES+=("$f")
+    done
 fi
 
 if [ "$CHECK_ONLY" = true ]; then
@@ -290,7 +278,7 @@ ANY_OUT_OF_SYNC=false
 
 # Loop through each file and apply rules
 for f in "${REL_FILES[@]}"; do
-    safe_name=$(echo "$f" | tr -c 'a-zA-Z0-9' '_')
+    safe_name="${f//[^a-zA-Z0-9]/_}"
     eval "recorded_mtime=\"\$MANIFEST_MTIME_$safe_name\""
     eval "recorded_size=\"\$MANIFEST_SIZE_$safe_name\""
     recorded_mtime="${recorded_mtime:-0}"
@@ -304,8 +292,9 @@ for f in "${REL_FILES[@]}"; do
     size_main=0
     if [ -f "$MAIN_WORKTREE/$f" ]; then
         exists_in_main=true
-        mtime_main=$(get_mtime "$MAIN_WORKTREE/$f")
-        size_main=$(get_size "$MAIN_WORKTREE/$f")
+        main_stats=$(get_mtime_and_size "$MAIN_WORKTREE/$f")
+        mtime_main="${main_stats%% *}"
+        size_main="${main_stats##* }"
         if [ "$recorded_mtime" -eq 0 ] || [ "$mtime_main" -ne "$recorded_mtime" ] || [ "$size_main" -ne "$recorded_size" ]; then
             main_modified=true
         fi
@@ -326,8 +315,9 @@ for f in "${REL_FILES[@]}"; do
         wt_name=$(basename "$wt_path")
         
         if [ -f "$wt_path/$f" ]; then
-            mtime_wt=$(get_mtime "$wt_path/$f")
-            size_wt=$(get_size "$wt_path/$f")
+            wt_stats=$(get_mtime_and_size "$wt_path/$f")
+            mtime_wt="${wt_stats%% *}"
+            size_wt="${wt_stats##* }"
             
             is_mod=false
             if [ "$recorded_mtime" -eq 0 ]; then
@@ -644,14 +634,18 @@ for p in "${_cpaths[@]}"; do
     p="${p%"${p##*[![:space:]]}"}"
     [ -z "$p" ] && continue
     
-    while read -r rel_f; do
-        [ -z "$rel_f" ] && continue
-        if [ -f "$MAIN_WORKTREE/$rel_f" ]; then
-            mtime=$(get_mtime "$MAIN_WORKTREE/$rel_f")
-            size=$(get_size "$MAIN_WORKTREE/$rel_f")
-            echo "$rel_f|$mtime|$size" >> "$MANIFEST_FILE"
-        fi
-    done <<< "$(get_relative_files "$MAIN_WORKTREE" "$p")"
+    files_wt=$(get_relative_files "$MAIN_WORKTREE" "$p")
+    if [ -n "$files_wt" ]; then
+        while read -r rel_f || [ -n "$rel_f" ]; do
+            [ -z "$rel_f" ] && continue
+            if [ -f "$MAIN_WORKTREE/$rel_f" ]; then
+                stats=$(get_mtime_and_size "$MAIN_WORKTREE/$rel_f")
+                mtime="${stats%% *}"
+                size="${stats##* }"
+                echo "$rel_f|$mtime|$size" >> "$MANIFEST_FILE"
+            fi
+        done <<< "$files_wt"
+    fi
 done
 
 echo -e "\n${GREEN}✓ Synchronization complete!${NC}"
