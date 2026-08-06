@@ -14,23 +14,23 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 case "$COMMAND" in
-    clone)  "$TOOLS_DIR/git-wt-clone" "$@" ;;
-    add)    "$TOOLS_DIR/git-wt-add" "$@" ;;
-    rm)     "$TOOLS_DIR/git-wt-rm" "$@" ;;
-    clean)  "$TOOLS_DIR/git-wt-clean" "$@" ;;
-    status) "$TOOLS_DIR/git-wt-status" "$@" ;;
-    sync)   "$TOOLS_DIR/git-wt-sync" "$@" ;;
+    clone)  exec "$TOOLS_DIR/git-wt-clone" "$@" ;;
+    add)    exec "$TOOLS_DIR/git-wt-add" "$@" ;;
+    rm)     exec "$TOOLS_DIR/git-wt-rm" "$@" ;;
+    clean)  exec "$TOOLS_DIR/git-wt-clean" "$@" ;;
+    status) exec "$TOOLS_DIR/git-wt-status" "$@" ;;
+    sync)   exec "$TOOLS_DIR/git-wt-sync" "$@" ;;
 
     # Pass-through to native git worktree
     lock|move|prune|repair|unlock)
-        git worktree "$COMMAND" "$@"
+        exec git worktree "$COMMAND" "$@"
         ;;
 
     list)
         if [ "$#" -eq 0 ]; then
-            "$TOOLS_DIR/git-wt-status" "$@"
+            exec "$TOOLS_DIR/git-wt-status" "$@"
         else
-            git worktree list "$@"
+            exec git worktree list "$@"
         fi
         ;;
 

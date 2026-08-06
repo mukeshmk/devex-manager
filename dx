@@ -17,13 +17,13 @@ NC='\033[0m'
 
 case "$COMMAND" in
     skills)
-        "$SKILLS_TOOLS_DIR/dx-skills" "$@"
+        exec "$SKILLS_TOOLS_DIR/dx-skills" "$@"
         ;;
     nb)
-        "$NB_TOOLS_DIR/dx-nb" "$@"
+        exec "$NB_TOOLS_DIR/dx-nb" "$@"
         ;;
     ctx)
-        "$CTX_TOOLS_DIR/dx-ctx" "$@"
+        exec "$CTX_TOOLS_DIR/dx-ctx" "$@"
         ;;
     *)
         echo -e "${BLUE}DevEx Manager (dx)${NC}"
