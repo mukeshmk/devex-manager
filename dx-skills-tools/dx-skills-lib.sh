@@ -70,6 +70,7 @@ else
     fi
 fi
 MASTER_DIR="${MASTER_DIR/#\~/$HOME}"
+MASTER_DIR="${MASTER_DIR%/}"
 
 # 2. Get active tools list
 if [ -n "$DX_TOOLS" ]; then
