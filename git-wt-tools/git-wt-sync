@@ -624,6 +624,21 @@ if [ "$CHECK_ONLY" = true ]; then
     fi
 fi
 
+# Prune stale empty directories left behind after file deletions.
+# The sync loop operates file-by-file, so removing the last file(s) from a
+# directory leaves the now-empty directory behind in each worktree. Walk each
+# directory copy path in every worktree and remove any empty directories
+# (depth-first, so nested empty dirs collapse too).
+for wt in "${ACTIVE_WORKTREES[@]}"; do
+    for p in "${_cpaths[@]}"; do
+        p="${p#"${p%%[![:space:]]*}"}"
+        p="${p%"${p##*[![:space:]]}"}"
+        [ -z "$p" ] && continue
+        [ -d "$wt/$p" ] || continue
+        find "$wt/$p" -depth -type d -empty -delete 2>/dev/null || true
+    done
+done
+
 # Rebuild manifest from final main worktree files
 echo -e "${GREEN}Rebuilding sync manifest...${NC}"
 mkdir -p "$(dirname "$MANIFEST_FILE")"
