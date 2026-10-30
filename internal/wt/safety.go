@@ -71,3 +71,29 @@ func canon(p string) string {
 
 // SamePath compares two paths after symlink resolution.
 func SamePath(a, b string) bool { return canon(a) == canon(b) }
+
+// LostCommits is the unpushed count that deletion would actually lose (merged or gone means kept elsewhere).
+func (s Safety) LostCommits() int {
+	if s.Merged || s.UpstreamGone {
+		return 0
+	}
+	return s.Unpushed
+}
+
+// RemoteHeads fetches heads once per distinct upstream remote of branches, for Assess.
+// A remote whose ls-remote fails (offline) is left out, so its upstreams are not treated as gone.
+func RemoteHeads(repo *gitx.Repo, branches ...string) map[string]map[string]bool {
+	heads := map[string]map[string]bool{}
+	tried := map[string]bool{}
+	for _, b := range branches {
+		remote, ok := repo.Upstream(b)
+		if !ok || tried[remote] {
+			continue
+		}
+		tried[remote] = true
+		if h, err := repo.RemoteHeads(remote); err == nil {
+			heads[remote] = h
+		}
+	}
+	return heads
+}
