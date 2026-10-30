@@ -1,6 +1,6 @@
 # DevEx Manager — Developer Experience Tools
 
-A collection of lightweight CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `dx nb` for Jupyter Notebook utilities, `dx ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
+A single-binary collection of CLI tools to enhance your development workflow. DevEx Manager includes `git wt` for managing Git worktrees, `dx nb` for Jupyter Notebook utilities, `dx ctx` for branch-specific developer scratchpads, and Python auto-venv tools for seamless virtual environment management.
 
 ## Key Features
 
@@ -13,7 +13,7 @@ A collection of lightweight CLI tools to enhance your development workflow. DevE
 
 ## Installation
 
-The quickest way to install DevEx Manager is via the remote installer. This will download the necessary scripts and configure your shell automatically.
+DevEx Manager is a single Go binary: `dx`, with `git-wt` as a symlink to it (so `git wt ...` works).
 
 ### Remote Installation (Recommended)
 
@@ -21,25 +21,35 @@ The quickest way to install DevEx Manager is via the remote installer. This will
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/mukeshmk/devex-manager/main/install.sh)"
 ```
 
-### Local Installation
+This downloads the latest GitHub Release binary for your machine (macOS or Linux, amd64 or arm64). You do not need Go.
 
-If you prefer to audit the code first or have already cloned the repository:
+### Building from a clone
 
 ```bash
 git clone https://github.com/mukeshmk/devex-manager.git
 cd devex-manager
-bash install.sh
+bash install.sh              # builds with `go build` if Go is on PATH, else downloads the release
+# or just build:
+go build -o dist/dx ./cmd/dx && ln -sf dx dist/git-wt
+go test ./...
 ```
 
 ### What the installer does:
-1. Downloads/Copies `git-wt`, `dx` and their subcommand scripts to `~/.local/bin/` and target tool folders.
-2. Makes all scripts executable
-3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases)
-4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv)
-5. Sets up shell auto-completion for `git wt` and `dx` commands
-6. Adds `~/.local/bin` to your `PATH` and configures completions in a managed `# >>> DevEx Manager >>>` block in your `~/.zshrc` or `~/.bashrc`
+1. Removes the old v1 Bash scripts and `*-tools/` directories (config, manifests, notes and backups are untouched).
+2. Installs `dx` and the `git-wt` symlink to `~/.local/bin/`.
+3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases).
+4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv).
+5. Generates shell completions (`dx completion zsh|bash`) and adds `~/.local/bin` to your `PATH` in a managed `# >>> DevEx Manager >>>` block in your `~/.zshrc` or `~/.bashrc`.
 
 After installing, open a new terminal or run `source ~/.zshrc` (or your respective shell config).
+
+### Behaviour changes from v1 (Bash)
+
+- `git wt rm` of a target that is not found exits 1.
+- Errors go to stderr.
+- `git wt clean` skips dirty worktrees by default (see [Dirty-worktree refusal](#dirty-worktree-refusal)).
+- `git wt sync` shows a plan first and backs up files before overwriting or deleting them.
+- With no terminal, prompts read stdin and EOF means "no" (nothing destructive happens). `--yes/-y` accepts a plan.
 
 ---
 
@@ -49,12 +59,13 @@ A lightweight CLI tool that wraps `git worktree` to simplify working with bare r
 
 ### Commands
 
+- **`git wt`** (no args) / **`git wt status`**: On a terminal, opens the full-screen worktree app (see below). Piped, prints a plain status table.
 - **`git wt clone <url>`**: Clones a repository as a bare repo and sets up an initial `main` worktree.
 - **`git wt add <branch-name> [custom-folder-name]`**: Creates a new worktree (or checks out an existing branch) using a short folder name derived from the branch.
-- **`git wt clean`**: Interactively find and remove stale worktrees that have already been merged. **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing any deletions, and aborts if they are out of sync.
+- **`git wt clean`**: Interactively find and remove stale worktrees (merged, or whose remote branch is gone). Shows what would be lost before confirming; `--yes`/`-y` takes the preselection. **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing any deletions, and aborts if they are out of sync.
 - **`git wt status`**: Show a rich status overview of all active worktrees, including sync status and uncommitted changes.
-- **`git wt rm <folder-name-or-branch-name>`**: Safely removes a worktree folder and deletes its associated local branch. **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing deletion, and aborts if they are out of sync.
-- **`git wt sync`**: Synchronizes configured `copies.paths` across all active worktrees using the main worktree as the central hub. Uses file-level modification times to automatically propagate additions, deletions, and modifications. Prompts for conflict resolution in interactive mode or creates conflict marker files when updates are incompatible. Supports checking sync status without applying changes via the `--check` (or `-c`) flag.
+- **`git wt rm <folder-name-or-branch-name>`**: Safely removes a worktree folder and deletes its associated local branch. Refuses dirty worktrees unless `--force`/`-f` (which also skips the sync check). **Note:** This command checks if configuration copies are synchronized across all worktrees before allowing deletion, and aborts if they are out of sync.
+- **`git wt sync`**: Synchronizes configured `copies.paths` across all active worktrees using the main worktree as the central hub. Uses file-level modification times to automatically propagate additions, deletions, and modifications. Prompts for conflict resolution in interactive mode or creates conflict marker files when updates are incompatible. Shows the full plan first and asks to confirm. Flags: `--check`/`-c` (report sync status, exit 1 if out of sync), `--dry-run` (print the plan, change nothing), `--yes`/`-y` (accept the plan without asking).
 
 ### Configuration (`.devex.conf`)
 
@@ -100,6 +111,43 @@ Running `git wt sync` aligns these files across all active worktrees using a fil
 
 To prevent accidental loss of configuration modifications made inside worktrees, all commands that delete or clean worktrees (`git wt clean` and `git wt rm`) automatically check if configuration copies are synchronized across all worktrees. If they are not in sync, the command will print details about the out-of-sync files, suggest running `git wt sync`, and abort the deletion.
 
+#### Sync backups
+
+Before sync overwrites or deletes any file, the old version is copied to `$(git rev-parse --git-common-dir)/info/devex/sync-backups/YYYY-MM-DD-HHMMSS/<worktree>/<rel-path>`.
+
+#### Dirty-worktree refusal
+
+A worktree is dirty if it has uncommitted changes, or its branch never had an upstream and has commits that exist on no remote. `git wt clean` leaves dirty worktrees unselected (you must tick them explicitly) and `git wt rm` refuses them without `--force`. The current worktree, the main worktree and the base branch are never deleted.
+
+### Full-screen apps
+
+On a terminal, two commands open a full-screen app. Piped or scripted, they print plain tables instead.
+
+**`git wt` / `git wt status`**: worktree list on the left, details (branch, path, remote state, changed files, that branch's `dx ctx` todos) on the right.
+
+| Key | Action |
+|---|---|
+| `up`/`down` (`k`/`j`) | Move |
+| `tab` | Focus todos pane |
+| `space` | Toggle the selected todo |
+| `/` | Filter (`esc` clears) |
+| `s` | Sync |
+| `d` | Delete the selected worktree (confirm) |
+| `c` | Clean stale worktrees |
+| `r` | Refresh |
+| `q` | Quit |
+
+**`dx skills` / `dx skills list`**: grid of skills (rows) by master and each tool (columns), with a diff of the selected skill alongside.
+
+| Key | Action |
+|---|---|
+| `up`/`down` (`k`/`j`) | Move |
+| `space` | Tick/untick the pending update |
+| `a` | Apply ticked updates |
+| `pgup`/`pgdn` | Scroll the diff |
+| `/` | Filter (`esc` clears) |
+| `q` | Quit |
+
 ---
 
 ## dx nb — Jupyter Notebook Utilities
@@ -121,7 +169,7 @@ To prevent accidental loss of configuration modifications made inside worktrees,
 
 ## dx-ctx — Developer Context Manager
 
-`dx ctx` provides local, untracked todo checklists and scratchpad notes specific to your active branch. This data is stored in the repository's `.git/info/devex/contexts/` directory so it stays private to your computer and never gets committed or pushed.
+`dx ctx` provides local, untracked todo checklists and scratchpad notes specific to your active branch. This data is stored in the repository's `<git-common-dir>/info/devex/contexts/` directory so it stays private to your computer and never gets committed or pushed.
 
 ### Commands
 
@@ -170,8 +218,8 @@ If the file `~/.devex.conf` is missing or contains template placeholders (such a
 
 ### Commands
 
-- **`dx skills [list]`**: Displays a table of all skills, their descriptions (extracted from prompt frontmatter), update states, and last modification times.
-- **`dx skills sync`**: Compares skill folders across all registered tools. Displays a preview of pending bidirectional syncs and executes them with automatic safety backups upon confirmation.
+- **`dx skills [list]`**: Opens the full-screen grid on a terminal; otherwise prints a table of all skills, their descriptions (extracted from prompt frontmatter), update states, and last modification times.
+- **`dx skills sync`**: Compares skill folders across all registered tools. Displays a preview of pending bidirectional syncs and executes them with automatic safety backups upon confirmation (`--yes`/`-y` accepts).
 - **`dx skills diff <skill>`**: Shows a recursive folder diff between target versions.
 - **`dx skills edit <skill>`**: Opens the master version of the skill in your `$EDITOR` and triggers a sync automatically after saving.
 - **`dx skills rm <skill>`**: Backs up and removes the skill directory from the master repo and all active tool paths.
@@ -214,8 +262,8 @@ Handy shortcuts installed via the `git-aliases/install-git-aliases.sh` module.
 ## Requirements
 
 - Git 2.15+
-- Bash 4+
-- macOS or Linux
+- macOS or Linux (amd64 or arm64)
+- Go 1.27+ only if building from source
 - (Optional) `uv`, `jq`, `nbstripout`, `nbconvert`, `ipykernel`, `nbdime`
 
 ## License
