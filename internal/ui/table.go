@@ -77,7 +77,7 @@ func Table(cols []Column, rows [][]string, width int) string {
 	}
 
 	cell := func(s string, i int) string {
-		s = strings.ReplaceAll(s, "\n", " ")
+		s = strings.NewReplacer("\n", " ", "\t", " ", "\r", " ").Replace(s)
 		if lipgloss.Width(s) > w[i] {
 			return ansi.Truncate(s, w[i], "…")
 		}
