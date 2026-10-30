@@ -188,7 +188,7 @@ func TestSkillsDiffAndTemplate(t *testing.T) {
 func TestSkillsInvalidNames(t *testing.T) {
 	cfg := fixture(t)
 	write(t, filepath.Join(cfg.MasterDir, "a/SKILL.md"), "m", t0)
-	for _, n := range []string{"", ".", "..", "a/b", "../x"} {
+	for _, n := range []string{"", ".", "..", "a/b", "../x", ".backups", "backups"} {
 		if l := Locations(cfg, n); l != nil {
 			t.Errorf("Locations(%q) = %v", n, l)
 		}
@@ -267,5 +267,31 @@ func TestSkillsApplyReportsDone(t *testing.T) {
 	_, done, err := ApplyUpdates(ups, cfg.MasterDir, time.Now())
 	if err == nil || done != 1 {
 		t.Fatalf("done=%d err=%v", done, err)
+	}
+}
+
+func TestSkillsApplyRefusesBroadSymlinkTarget(t *testing.T) {
+	home := t.TempDir()
+	cfg := config.SkillsConfig{MasterDir: filepath.Join(home, "master")}
+	claude := filepath.Join(home, "claude")
+	cfg.Tools = []config.SkillTool{{Name: "claude", Dir: claude}}
+	from := filepath.Join(cfg.MasterDir, "a")
+	write(t, filepath.Join(from, "SKILL.md"), "new", t0)
+	write(t, filepath.Join(home, "precious.txt"), "keep", t0)
+	os.MkdirAll(claude, 0o755)
+	to := filepath.Join(claude, "a")
+	for _, target := range []string{home, claude, cfg.MasterDir, "/"} {
+		os.Remove(to)
+		os.Symlink(target, to)
+		root, done, err := ApplyUpdates([]Update{{"a", "master", from, "claude", to}}, cfg.MasterDir, time.Now())
+		if err == nil || done != 0 || root != "" {
+			t.Fatalf("%s: root=%q done=%d err=%v", target, root, done, err)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, "precious.txt")); string(b) != "keep" {
+		t.Fatal("home content deleted")
+	}
+	if _, err := os.Stat(filepath.Join(cfg.MasterDir, ".backups")); err == nil {
+		t.Fatal("backup written")
 	}
 }
