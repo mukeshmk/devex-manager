@@ -13,6 +13,7 @@ import (
 
 	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/skills"
+	"github.com/mukeshmk/devex-manager/internal/skillsapp"
 	"github.com/mukeshmk/devex-manager/internal/ui"
 )
 
@@ -25,14 +26,22 @@ var (
 const skillsUsage = "Usage: dx skills [list|sync|diff|edit|rm] [arguments]"
 
 func init() {
-	// R6: no args prints list (TTY too) until the Task 15 app exists.
+	// No args: the grid app on a TTY, else list (non-TTY never opens a full-screen app).
 	dxGroupRun["skills"] = func(c *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			fmt.Fprintln(c.ErrOrStderr(), colours(c.ErrOrStderr()).red.Render(fmt.Sprintf("Error: Unknown command '%s'", args[0])))
 			fmt.Fprintln(c.ErrOrStderr(), skillsUsage)
 			return errExit1
 		}
-		return withSkills(c, nil, "", (*skillsRun).list)
+		return withSkills(c, nil, "", func(s *skillsRun) error {
+			if f, ok := s.out.(*os.File); ok && ui.IsTTY(f) {
+				if err := skillsapp.Run(skillsapp.New(s.cfg)); err != nil {
+					return s.fail(err)
+				}
+				return nil
+			}
+			return s.list()
+		})
 	}
 	registerDx("skills", &cobra.Command{Use: "list", Short: "List skills and their newest copy", Args: cobra.ArbitraryArgs,
 		RunE: func(c *cobra.Command, _ []string) error { return withSkills(c, nil, "", (*skillsRun).list) }})
