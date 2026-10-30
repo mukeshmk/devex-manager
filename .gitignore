@@ -24,8 +24,9 @@ ANTIGRAVITY.md
 .claude
 CLAUDE.md
 
-# Tests
-tests/
+# Tests (only the auto-venv prompt test is tracked)
+tests/*
+!tests/test_auto_venv_prompt.sh
 
 # Brainstorm mockups
 .superpowers/
