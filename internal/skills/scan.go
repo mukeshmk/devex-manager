@@ -40,10 +40,14 @@ func roots(cfg config.SkillsConfig) []Copy {
 	return r
 }
 
+// reserved names are backup dirs, never skills: Scan skips them and ValidName rejects them.
+var reserved = []string{".backups", "backups"}
+
 // ValidName rejects names that are not a single path element: "", ".", ".." or anything with a
-// separator would make <root>/<name> the root itself or a path outside it.
+// separator would make <root>/<name> the root itself or a path outside it. Backup dirs are
+// rejected too, so rm/edit can never touch them.
 func ValidName(name string) error {
-	if name == "" || name == "." || name == ".." || name != filepath.Base(name) {
+	if name == "" || name == "." || name == ".." || name != filepath.Base(name) || slices.Contains(reserved, name) {
 		return fmt.Errorf("Error: Invalid skill name '%s'.", name)
 	}
 	return nil
@@ -134,7 +138,7 @@ func Scan(cfg config.SkillsConfig) ([]Skill, error) {
 		}
 		for _, e := range ents {
 			n := e.Name()
-			if n == ".backups" || n == "backups" || slices.Contains(names, n) || cfg.IsIgnored(n) {
+			if slices.Contains(reserved, n) || slices.Contains(names, n) || cfg.IsIgnored(n) {
 				continue
 			}
 			if d := filepath.Join(r.Dir, n); isDir(d) && SkillFile(d) != "" {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -56,7 +57,17 @@ func (b *backupRoot) save(dir string, rel ...string) error {
 // how many updates completed.
 func ApplyUpdates(ups []Update, master string, now time.Time) (string, int, error) {
 	b := newBackupRoot(master, now)
+	protected := []string{master}
+	if h, err := os.UserHomeDir(); err == nil {
+		protected = append(protected, h)
+	}
+	for _, u := range ups {
+		protected = append(protected, filepath.Dir(u.ToDir), filepath.Dir(u.FromDir))
+	}
 	for i, u := range ups {
+		if r, err := filepath.EvalSymlinks(u.ToDir); err == nil && covers(r, protected) {
+			return b.root, i, fmt.Errorf("Error: refusing to sync %s into %s: it resolves to %s, which contains the master or a tool directory", u.Skill, u.ToDir, r)
+		}
 		if isDir(u.ToDir) {
 			if err := b.save(u.ToDir, u.To, u.Skill); err != nil {
 				return b.root, i, fmt.Errorf("Error: backup of %s failed, %s not synced: %w", u.ToDir, u.Skill, err)
@@ -67,6 +78,23 @@ func ApplyUpdates(ups []Update, master string, now time.Time) (string, int, erro
 		}
 	}
 	return b.root, len(ups), nil
+}
+
+// covers reports whether dir is "/", or equal to or an ancestor of any protected path: mirroring
+// into it would delete everything the source lacks (a skill symlinked to a broad directory).
+func covers(dir string, protected []string) bool {
+	if dir == filepath.Dir(dir) {
+		return true
+	}
+	for _, p := range protected {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			p = r
+		}
+		if p == dir || strings.HasPrefix(p, dir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // mirror makes dst an exact copy of src: files, symlinks, modes and mtimes; extras in dst are deleted.
