@@ -129,13 +129,7 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 // refuseUnsafe lists what would be lost when the worktree or branch is not Safe.
 func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree, branch string, fail func(...string) error) error {
 	merged, _ := repo.MergedBranches(cfg.BaseBranch) // unknown base: treat nothing as merged
-	heads := map[string]map[string]bool{}
-	if remote, ok := repo.Upstream(branch); ok {
-		if h, err := repo.RemoteHeads(remote); err == nil { // offline: upstream not treated as gone
-			heads[remote] = h
-		}
-	}
-	s, err := wt.Assess(repo, subject, merged, heads)
+	s, err := wt.Assess(repo, subject, merged, wt.RemoteHeads(repo, branch))
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -152,8 +146,8 @@ func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree,
 			lines = append(lines, fmt.Sprintf("  ... and %d more", n-10))
 		}
 	}
-	if s.Unpushed > 0 && !s.Merged && !s.UpstreamGone {
-		lines = append(lines, fmt.Sprintf("%d commit(s) not on any remote", s.Unpushed))
+	if n := s.LostCommits(); n > 0 {
+		lines = append(lines, fmt.Sprintf("%d commit(s) not on any remote", n))
 	}
 	return fail(append(lines, "Hint: use --force to remove anyway")...)
 }
