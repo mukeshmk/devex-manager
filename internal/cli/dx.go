@@ -34,6 +34,7 @@ func NewDxRoot() *cobra.Command {
 		grp := &cobra.Command{Use: g.name, Short: g.short, Args: cobra.ArbitraryArgs,
 			RunE: func(c *cobra.Command, _ []string) error { return c.Help() }}
 		for _, c := range dxCmds[g.name] {
+			resetFlags(c)
 			grp.AddCommand(c)
 		}
 		root.AddCommand(grp)

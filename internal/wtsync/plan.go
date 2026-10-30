@@ -33,6 +33,9 @@ type Choice struct {
 	Ops        [][]Op
 	YesNo      bool
 	BreakOnYes bool
+	// RecheckSame (R4 conflicts) names main and the worktree file: if earlier answers already made
+	// them identical, Resolve takes Ops[0] (align main->wt) without asking, like the Bash runtime diff.
+	RecheckSame *[2]Loc
 }
 
 // Step is the work for one file: Ops run unconditionally, then Choice (if any) is asked.
@@ -55,7 +58,11 @@ func Defaults(s Step) int { return s.Choice.Default }
 
 // Walk resolves steps in order with pick and returns the ops to apply, in order.
 func Walk(steps []Step, pick func(Step) int) []Op {
-	var ops []Op
+	return walk(steps, func(s Step, _ []Op) int { return pick(s) }, nil)
+}
+
+// walk appends to ops and hands pick the ops resolved so far.
+func walk(steps []Step, pick func(Step, []Op) int, ops []Op) []Op {
 	broken := "" // steps for one file are contiguous, so the last broken Rel is enough
 	for _, s := range steps {
 		if broken != "" && s.Rel == broken {
@@ -65,10 +72,10 @@ func Walk(steps []Step, pick func(Step) int) []Op {
 		if s.Choice == nil {
 			continue
 		}
-		i := pick(s)
+		i := pick(s, ops)
 		ops = append(ops, s.Choice.Ops[i]...)
 		if s.Choice.YesNo && i == 1 {
-			ops = append(ops, Walk(s.Then, pick)...)
+			ops = walk(s.Then, pick, ops)
 		}
 		if s.Choice.BreakOnYes && i == 0 {
 			broken = s.Rel
@@ -280,10 +287,12 @@ func planFile(main string, others []string, f FileState, same func(a, b string) 
 				steps = append(steps, autoStep(rel, []Op{cp(main, wt, rel)})) // aligns mtime
 				continue
 			}
-			steps = append(steps, mainVsWT(rel, "conflict: "+rel+" modified in main and "+filepath.Base(wt), wt,
+			st := mainVsWT(rel, "conflict: "+rel+" modified in main and "+filepath.Base(wt), wt,
 				[]Op{cp(main, wt, rel)},
 				append([]Op{cp(wt, main, rel)}, fanOut(m, all, wt, main)...),
-				[]Op{conflictCopy(wt, main, rel, filepath.Base(wt))}))
+				[]Op{conflictCopy(wt, main, rel, filepath.Base(wt))})
+			st.Choice.RecheckSame = &[2]Loc{m, {wt, rel}}
+			steps = append(steps, st)
 		}
 	default: // R5, git-wt-sync:553-611
 		if len(c.modifying) > 0 {
