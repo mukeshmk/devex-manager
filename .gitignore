@@ -22,7 +22,6 @@ ANTIGRAVITY.md
 
 # Claude
 .claude
-CLAUDE.md
 
 # Tests (only the auto-venv prompt test is tracked)
 tests/*
