@@ -37,7 +37,7 @@ func FindStale(repo *gitx.Repo, cfg config.RepoConfig) ([]Candidate, error) {
 	heads := RemoteHeads(repo, branches...)
 	var out []Candidate
 	for _, w := range keep {
-		s, err := Assess(repo, w, merged, heads)
+		s, err := Assess(repo, cfg, w, merged, heads)
 		if err != nil {
 			return nil, err
 		}

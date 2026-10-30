@@ -187,3 +187,14 @@ func TestCleanRefusesWhenMainUnknown(t *testing.T) {
 		}
 	}
 }
+
+// M7: upstream gone but new local commits: still preselected, and the label says so.
+func TestCleanLabelShowsGoneLocalCommits(t *testing.T) {
+	c := newCleanFix(t)
+	git(t, c.deleted, "commit", "-q", "--allow-empty", "-m", "after the remote went away") // plus the one the deleted remote branch held
+	rc, out := clean(t, c.main, "", "--yes")
+	if rc != 0 || !strings.Contains(out, "stale-deleted (Remote branch deleted (on origin) at "+c.deleted+")  ℹ 2 local commit(s) not on any remote") {
+		t.Fatalf("rc=%d\n%s", rc, out)
+	}
+	gone(t, c.deleted, "stale-deleted", true)
+}

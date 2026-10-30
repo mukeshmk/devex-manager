@@ -79,6 +79,9 @@ func runClean(in *os.File, out, errw io.Writer, yes bool) error {
 			labels[i] += fmt.Sprintf("  ⚠ %d uncommitted file(s), %d commit(s) not on any remote",
 				len(c.Safety.Uncommitted), c.Safety.LostCommits())
 		}
+		if n := c.Safety.GoneCommits(); n > 0 {
+			labels[i] += fmt.Sprintf("  ℹ %d local commit(s) not on any remote", n)
+		}
 	}
 	fmt.Fprintln(out, co.yellow.Render("Found the following stale worktrees:"))
 	fmt.Fprintln(out, "\n"+co.red.Render("WARNING: This will permanently delete the worktree folder and the local branch."))

@@ -15,6 +15,7 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/ctx"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/wt"
 )
 
 // start builds the app on a fixture with DEVX-1 and DEVX-2, loaded and sized, recording execs into got.
@@ -178,7 +179,7 @@ func TestAppDeleteShowsConfirm(t *testing.T) {
 		t.Errorf("esc cancel ran %v", got)
 	}
 	press(m, "d", "y")
-	if len(got) != 1 || !slices.Equal(got[0], []string{"git-wt", "rm", "DEVX-2"}) {
+	if len(got) != 1 || !slices.Equal(got[0], []string{"git-wt", "rm", filepath.Join(f.Root, "DEVX-2")}) {
 		t.Errorf("execs %v", got)
 	}
 }
@@ -216,5 +217,27 @@ func TestPausedKeepsOutput(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "refused\n\nPress Enter to return to git wt…") {
 		t.Errorf("out %q", out.String())
+	}
+}
+
+// C1: the selected row's path is what rm gets, so folder beta is never confused with branch beta.
+func TestAppDeletePassesPath(t *testing.T) {
+	var got [][]string
+	f, m := start(t, &got)
+	f.AddWorktree(t, "alpha", "beta")
+	beta := f.AddWorktree(t, "beta", "gamma")
+	press(m, "r", "/", "gamma", "enter", "d", "y")
+	if len(got) != 1 || !slices.Equal(got[0], []string{"git-wt", "rm", beta}) {
+		t.Errorf("execs %v", got)
+	}
+}
+
+// M7: upstream gone with local commits is still deletable (owner rule) but the modal says what goes.
+func TestModalShowsGoneLocalCommits(t *testing.T) {
+	m := model{w: 100, h: 30, confirm: &confirm{folder: "x", path: "/r/x",
+		safety: wt.Safety{Unpushed: 2, UpstreamGone: true, HasUpstream: true}}}
+	v := m.modal()
+	if !strings.Contains(v, "2 local commit(s) not on any remote") || strings.Contains(v, "nothing would be lost") || !strings.Contains(v, "y confirm") {
+		t.Errorf("modal:\n%s", v)
 	}
 }

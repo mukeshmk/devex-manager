@@ -4,8 +4,11 @@ package wt
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 )
 
@@ -23,14 +26,16 @@ func (s Safety) Safe() bool {
 
 // Assess inspects wt; remoteHeads is keyed by remote name, as fetched by the caller.
 // A missing remote entry (e.g. ls-remote failed) means the upstream is not treated as gone.
-func Assess(repo *gitx.Repo, wt gitx.Worktree, merged map[string]bool, remoteHeads map[string]map[string]bool) (Safety, error) {
+func Assess(repo *gitx.Repo, cfg config.RepoConfig, wt gitx.Worktree, merged map[string]bool, remoteHeads map[string]map[string]bool) (Safety, error) {
 	var s Safety
 	var err error
 	present := wt.Path != "" && !wt.Prunable
 	if present {
-		if s.Uncommitted, err = gitx.ChangedFiles(wt.Path); err != nil {
+		// One line per untracked file, so a configured path is told apart from a new file next to it.
+		if s.Uncommitted, err = gitx.ChangedFiles(wt.Path, "--untracked-files=all"); err != nil {
 			return s, err
 		}
+		s.Uncommitted = slices.DeleteFunc(s.Uncommitted, func(l string) bool { return configuredUntracked(l, wt.Path, cfg) })
 	}
 	ref, dir := wt.Branch, repo.CommonDir
 	if ref == "" { // detached HEAD: count from the worktree itself
@@ -53,6 +58,33 @@ func Assess(repo *gitx.Repo, wt gitx.Worktree, merged map[string]bool, remoteHea
 			!heads[strings.TrimPrefix(merge, "refs/heads/")]
 	}
 	return s, nil
+}
+
+// configuredUntracked is true for an untracked porcelain line that add/sync put there: a file at or
+// under a copy path (rm and clean refuse first unless those match main), or a symlink path that
+// really is a symlink (Remove unlinks it; its target is untouched). Tracked changes always count.
+func configuredUntracked(line, wtPath string, cfg config.RepoConfig) bool {
+	rel, ok := strings.CutPrefix(line, "?? ")
+	if !ok {
+		return false
+	}
+	if u, err := strconv.Unquote(rel); err == nil { // git quotes unusual names
+		rel = u
+	}
+	rel = strings.TrimSuffix(rel, "/")
+	clean := func(p string) string { return strings.Trim(filepath.ToSlash(filepath.Clean(p)), "/") }
+	for _, p := range cfg.CopyPaths {
+		if p = clean(p); p != "" && p != "." && (rel == p || strings.HasPrefix(rel, p+"/")) {
+			return true
+		}
+	}
+	for _, p := range cfg.SymlinkPaths {
+		if clean(p) == rel {
+			fi, err := os.Lstat(filepath.Join(wtPath, rel))
+			return err == nil && fi.Mode()&os.ModeSymlink != 0
+		}
+	}
+	return false
 }
 
 // Inside reports whether cwd is path or below it, comparing whole path components.
@@ -78,6 +110,15 @@ func (s Safety) LostCommits() int {
 		return 0
 	}
 	return s.Unpushed
+}
+
+// GoneCommits counts local commits that Safe() lets go because the upstream is gone (owner rule:
+// squash-merged elsewhere). They are still not on any remote, so callers show them as info.
+func (s Safety) GoneCommits() int {
+	if s.UpstreamGone && !s.Merged {
+		return s.Unpushed
+	}
+	return 0
 }
 
 // RemoteHeads fetches heads once per distinct upstream remote of branches, for Assess.

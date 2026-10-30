@@ -116,9 +116,9 @@ func AheadBehind(dir, branch string) (ahead, behind int, hasUpstream bool, err e
 }
 
 // ChangedFiles returns `status --porcelain` lines.
-func ChangedFiles(dir string) ([]string, error) {
+func ChangedFiles(dir string, extra ...string) ([]string, error) {
 	// Not Run(): its TrimSpace would eat the leading space of " M file".
-	cmd := exec.Command("git", "status", "--porcelain")
+	cmd := exec.Command("git", append([]string{"status", "--porcelain"}, extra...)...)
 	cmd.Dir = dir
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
