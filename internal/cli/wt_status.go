@@ -27,13 +27,6 @@ func init() {
 	registerWt(cmd)
 }
 
-// interactive is true only when both stdin and stdout are terminals: the app needs keys and a screen.
-func interactive(c *cobra.Command) bool {
-	in, _ := c.InOrStdin().(*os.File)
-	out, _ := c.OutOrStdout().(*os.File)
-	return ui.IsTTY(in) && ui.IsTTY(out)
-}
-
 func runStatus(c *cobra.Command, out, errw io.Writer) error {
 	fail := func(err error) error {
 		fmt.Fprintln(errw, colours(errw).red.Render(err.Error()))
@@ -65,6 +58,7 @@ func runStatus(c *cobra.Command, out, errw io.Writer) error {
 	if err != nil {
 		return fail(err)
 	}
-	fmt.Fprint(out, wt.RenderTable(rows, 100))
+	f, _ := out.(*os.File)
+	fmt.Fprint(out, wt.RenderTable(rows, ui.Width(f)))
 	return nil
 }

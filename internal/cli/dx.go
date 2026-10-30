@@ -3,11 +3,14 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mukeshmk/devex-manager/internal/ui"
 )
 
 // Version is set by cmd/dx from the build-time version.
@@ -48,6 +51,18 @@ func NewDxRoot() *cobra.Command {
 	}
 	return root
 }
+
+// interactive is true only when both stdin and stdout are terminals: an app needs keys and a screen.
+func interactive(c *cobra.Command) bool {
+	in, _ := c.InOrStdin().(*os.File)
+	out, _ := c.OutOrStdout().(*os.File)
+	return ui.IsTTY(in) && ui.IsTTY(out)
+}
+
+// exitCode carries a child process exit status; Run returns it as the exit code.
+type exitCode int
+
+func (e exitCode) Error() string { return "exit " + fmt.Sprint(int(e)) }
 
 // Run executes the tree selected by argv0 and returns the process exit code.
 func Run(argv0 string, args []string, in *os.File, out, errw io.Writer) int {
