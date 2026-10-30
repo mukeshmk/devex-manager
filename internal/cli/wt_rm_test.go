@@ -1,0 +1,153 @@
+package cli
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/mukeshmk/devex-manager/internal/gitx"
+)
+
+func (s *syncFix) rm(t *testing.T, args ...string) (int, string) {
+	t.Helper()
+	t.Chdir(s.main)
+	in, err := os.CreateTemp(t.TempDir(), "in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer in.Close()
+	var out bytes.Buffer
+	rc := Run("git-wt", append([]string{"rm"}, args...), in, &out, &out)
+	return rc, out.String()
+}
+
+func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
+
+func branchExists(t *testing.T, s *syncFix, b string) bool {
+	_, err := gitx.Run(s.main, "show-ref", "--verify", "--quiet", "refs/heads/"+b)
+	return err == nil
+}
+
+// outOfSync mirrors tests/test_wt_deletion_sync_checks.sh: a copy path differs between worktrees.
+func outOfSync(t *testing.T, s *syncFix) {
+	write(t, filepath.Join(s.main, ".vscode", "a.json"), "main")
+	write(t, filepath.Join(s.feat, ".vscode", "a.json"), "feat")
+}
+
+func TestRmAbortsWhenOutOfSync(t *testing.T) { // TEST 4
+	s := newSyncFix(t)
+	outOfSync(t, s)
+	rc, out := s.rm(t, "feat")
+	if rc == 0 || !strings.Contains(out, "Cannot remove worktree while files are not in sync") || !strings.Contains(out, "git wt sync") {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if !exists(s.feat) || !branchExists(t, s, "feat") {
+		t.Fatal("refusal changed something")
+	}
+}
+
+func TestRmForceBypassesSync(t *testing.T) { // TEST 5-7
+	for _, args := range [][]string{{"-f", "feat"}, {"--force", "feat"}, {"feat", "-f"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			s := newSyncFix(t)
+			outOfSync(t, s)
+			os.Symlink(s.main, filepath.Join(s.feat, ".claude"))
+			rc, out := s.rm(t, args...)
+			if rc != 0 || strings.Contains(out, "not in sync") {
+				t.Fatalf("rc=%d out=%s", rc, out)
+			}
+			for _, want := range []string{"Cleaning up worktree and branch for: feat", "[1/2] Removing worktree folder and configuration...",
+				"Removing symlink .claude...", "[2/2] Deleting local branch...", "✓ Clean up complete! Workspace is tidy."} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %q in:\n%s", want, out)
+				}
+			}
+			if exists(s.feat) || branchExists(t, s, "feat") {
+				t.Fatal("not removed")
+			}
+			if !exists(s.main) {
+				t.Fatal("symlink target was removed")
+			}
+		})
+	}
+}
+
+func TestRmUsageErrors(t *testing.T) { // TEST 8-9
+	s := newSyncFix(t)
+	if rc, out := s.rm(t, "-f"); rc == 0 || !strings.Contains(out, "Error: Target (folder or branch name) is required") || !strings.Contains(out, "Usage: git wt rm [-f|--force] <folder-name-or-branch-name>") {
+		t.Errorf("no target: rc=%d out=%s", rc, out)
+	}
+	if rc, out := s.rm(t, "-f", "feat", "another-arg"); rc == 0 || !strings.Contains(out, "Error: Too many arguments specified") {
+		t.Errorf("too many: rc=%d out=%s", rc, out)
+	}
+	if !exists(s.feat) {
+		t.Fatal("usage error removed worktree")
+	}
+}
+
+func TestRmRefusesDirty(t *testing.T) {
+	s := newSyncFix(t)
+	for i := 0; i < 12; i++ {
+		write(t, filepath.Join(s.feat, "f"+string(rune('a'+i))+".txt"), "x")
+	}
+	if _, err := gitx.Run(s.feat2, "commit", "-q", "--allow-empty", "-m", "local"); err != nil {
+		t.Fatal(err)
+	}
+	rc, out := s.rm(t, "feat")
+	if rc == 0 || !strings.Contains(out, "?? fa.txt") || !strings.Contains(out, "and 2 more") || !strings.Contains(out, "use --force to remove anyway") {
+		t.Fatalf("dirty: rc=%d out=%s", rc, out)
+	}
+	if !exists(s.feat) || !branchExists(t, s, "feat") {
+		t.Fatal("refusal changed something")
+	}
+	rc, out = s.rm(t, "feat2")
+	if rc == 0 || !strings.Contains(out, "1 commit(s) not on any remote") {
+		t.Fatalf("unpushed: rc=%d out=%s", rc, out)
+	}
+	if rc, out = s.rm(t, "--force", "feat"); rc != 0 || exists(s.feat) {
+		t.Fatalf("force: rc=%d out=%s", rc, out)
+	}
+}
+
+func TestRmRefusesMainAndBase(t *testing.T) {
+	s := newSyncFix(t)
+	fromRoot := *s
+	fromRoot.main = s.f.Root // not inside main, so the main rule is what refuses
+	if rc, out := fromRoot.rm(t, "--force", "main"); rc == 0 || !strings.Contains(out, "Refusing to remove the main worktree 'main'") {
+		t.Errorf("main: rc=%d out=%s", rc, out)
+	}
+	// base branch refused even with --force
+	write(t, filepath.Join(s.f.Root, ".devex.conf"), "[repo]\nbase_branch = feat2\n")
+	if rc, out := s.rm(t, "-f", "feat2"); rc == 0 || !strings.Contains(out, "Refusing to delete the base branch 'feat2'") {
+		t.Errorf("base: rc=%d out=%s", rc, out)
+	}
+	if !exists(s.main) || !exists(s.feat2) || !branchExists(t, s, "main") {
+		t.Fatal("refusal changed something")
+	}
+}
+
+func TestRmRefusesInside(t *testing.T) {
+	s := newSyncFix(t)
+	s.main = s.feat // run from inside the target
+	rc, out := s.rm(t, "-f", "feat")
+	if rc == 0 || !strings.Contains(out, "You are currently inside the worktree you are trying to delete!") || !exists(s.feat) {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+}
+
+func TestRmBranchOnly(t *testing.T) {
+	s := newSyncFix(t)
+	if _, err := gitx.Run(s.main, "branch", "DEVX-7-orphan"); err != nil {
+		t.Fatal(err)
+	}
+	rc, out := s.rm(t, "DEVX-7")
+	if rc != 0 || !strings.Contains(out, "Worktree for 'DEVX-7' not found") || branchExists(t, s, "DEVX-7-orphan") {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	rc, out = s.rm(t, "nothing")
+	if rc == 0 || !strings.Contains(out, "Local branch 'nothing' does not exist.") {
+		t.Fatalf("none: rc=%d out=%s", rc, out)
+	}
+}

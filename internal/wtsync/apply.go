@@ -240,6 +240,35 @@ type SyncSession struct {
 	CommonDir string
 }
 
+// MainWorktree resolves the hub worktree (git-wt-sync:66-95): folder named MainWorktreeName,
+// else <Root>/<MainWorktreeName>, else the first active one. Paths are symlink-resolved.
+func MainWorktree(repo *gitx.Repo, cfg config.RepoConfig, wts []gitx.Worktree) (main string, active []string, err error) {
+	for _, w := range wts {
+		if w.Bare || w.Prunable {
+			continue
+		}
+		p, err := filepath.EvalSymlinks(w.Path)
+		if err != nil {
+			return "", nil, err
+		}
+		active = append(active, p)
+		if filepath.Base(p) == cfg.MainWorktreeName {
+			main = p
+		}
+	}
+	if main != "" {
+		return main, active, nil
+	}
+	if fi, err := os.Stat(filepath.Join(repo.Root, cfg.MainWorktreeName)); err == nil && fi.IsDir() {
+		main, err = filepath.EvalSymlinks(filepath.Join(repo.Root, cfg.MainWorktreeName))
+		return main, active, err
+	}
+	if len(active) > 0 {
+		return active[0], active, nil
+	}
+	return "", nil, errors.New("Error: No active worktrees found.")
+}
+
 // Session finds the main worktree (git-wt-sync:66-95), checks for conflict markers and scans.
 func Session(repo *gitx.Repo, cfg config.RepoConfig) (*SyncSession, error) {
 	wts, err := repo.Worktrees()
@@ -248,29 +277,8 @@ func Session(repo *gitx.Repo, cfg config.RepoConfig) (*SyncSession, error) {
 	}
 	s := &SyncSession{Root: repo.Root, CopyPaths: cfg.CopyPaths, CommonDir: repo.CommonDir}
 	var active []string
-	for _, w := range wts {
-		if w.Bare || w.Prunable {
-			continue
-		}
-		p, err := filepath.EvalSymlinks(w.Path)
-		if err != nil {
-			return nil, err
-		}
-		active = append(active, p)
-		if filepath.Base(p) == cfg.MainWorktreeName {
-			s.Main = p
-		}
-	}
-	if s.Main == "" {
-		if fi, err := os.Stat(filepath.Join(repo.Root, cfg.MainWorktreeName)); err == nil && fi.IsDir() {
-			if s.Main, err = filepath.EvalSymlinks(filepath.Join(repo.Root, cfg.MainWorktreeName)); err != nil {
-				return nil, err
-			}
-		} else if len(active) > 0 {
-			s.Main = active[0]
-		} else {
-			return nil, errors.New("Error: No active worktrees found.")
-		}
+	if s.Main, active, err = MainWorktree(repo, cfg, wts); err != nil {
+		return nil, err
 	}
 	for _, p := range active {
 		if p != s.Main {
