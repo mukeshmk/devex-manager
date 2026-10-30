@@ -111,9 +111,14 @@ func TestSyncFailureKeepsManifest(t *testing.T) {
 	if rc != 1 {
 		t.Fatalf("rc=%d\n%s", rc, out)
 	}
-	if !strings.Contains(out, "Backups stored in: "+filepath.Join(s.f.Root, ".git", "info", "devex", "sync-backups")) {
-		t.Errorf("backup dir not reported:\n%s", out)
+	_, after, ok := strings.Cut(out, "Backups stored in: ")
+	bk, _, _ := strings.Cut(after, "\n")
+	if !ok || !strings.HasPrefix(bk, filepath.Join(s.f.Root, ".git", "info", "devex", "sync-backups")) {
+		t.Fatalf("backup dir not reported:\n%s", out)
 	}
+	// op 1 (feat -> main) landed before the stop, and main's original was backed up first
+	fileIs(t, filepath.Join(s.main, ".vscode/settings.json"), "v2")
+	fileIs(t, filepath.Join(bk, "main", ".vscode/settings.json"), "v1")
 	if after, _ := os.ReadFile(s.manifest); !bytes.Equal(before, after) {
 		t.Fatalf("manifest rewritten after failure:\n%s\nvs\n%s", before, after)
 	}
