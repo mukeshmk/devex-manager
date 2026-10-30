@@ -68,7 +68,12 @@ func NewGitWtRoot() *cobra.Command {
 // one Run would otherwise leak into the next (tests run many in one process).
 func resetFlags(c *cobra.Command) {
 	c.Flags().VisitAll(func(f *pflag.Flag) {
-		f.Value.Set(f.DefValue)
+		// shortcut: slice flags reset to empty, not to a non-empty default; none exist yet
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			sv.Replace(nil)
+		} else {
+			f.Value.Set(f.DefValue)
+		}
 		f.Changed = false
 	})
 }

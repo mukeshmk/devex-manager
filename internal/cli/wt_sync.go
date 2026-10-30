@@ -130,12 +130,13 @@ func runSync(in *os.File, out, errw io.Writer, check, dryRun, yes bool) error {
 	}
 
 	backups := filepath.Join(s.CommonDir, "info", "devex", "sync-backups", time.Now().Format("2006-01-02-150405"))
+	used, err := wtsync.Apply(wtsync.Resolve(plan, pr), backups)
 	reportBackups := func(w io.Writer) {
-		if _, err := os.Stat(backups); err == nil {
-			fmt.Fprintln(w, "Backups stored in: "+backups)
+		if used != "" {
+			fmt.Fprintln(w, "Backups stored in: "+used)
 		}
 	}
-	if err := wtsync.Apply(wtsync.Resolve(plan, pr), backups); err != nil {
+	if err != nil {
 		fmt.Fprintln(errw, ce.red.Render(err.Error()))
 		reportBackups(errw)
 		fmt.Fprintln(errw, "The sync manifest was not updated.")

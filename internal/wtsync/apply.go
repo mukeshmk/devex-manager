@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -74,18 +75,72 @@ func (op Op) String() string {
 }
 
 // Apply runs ops strictly in order. Before an op touches an existing destination, that file is
-// copied to backupRoot/<worktree folder>/<rel> (dir created only when needed). A Copy with a
-// missing source is an error. Stops at the first error.
-func Apply(ops []Op, backupRoot string) error {
+// copied to <root>/<worktree folder>/<rel>, where root is backupRoot (or backupRoot-N if that
+// already exists) and same-named worktrees get folder-2, folder-3... The root is created only
+// when needed and returned ("" if nothing was backed up). A Copy with a missing source is an
+// error. Stops at the first error.
+func Apply(ops []Op, backupRoot string) (string, error) {
+	b := &backups{base: backupRoot, names: map[string]string{}, done: map[string]bool{}}
 	for _, op := range ops {
-		if err := applyOne(op, backupRoot); err != nil {
-			return fmt.Errorf("Error: sync stopped at %s: %w (backups in %s)", op, err, backupRoot)
+		if err := b.applyOne(op); err != nil {
+			where := b.root
+			if where == "" {
+				where = "none written"
+			}
+			return b.root, fmt.Errorf("Error: sync stopped at %s: %w (backups in %s)", op, err, where)
 		}
 	}
+	return b.root, nil
+}
+
+// backups is one Apply run's backup state; it never writes into a path it did not create.
+type backups struct {
+	base, root string
+	names      map[string]string // worktree path -> subdir under root
+	done       map[string]bool   // destinations already backed up this run
+}
+
+func (b *backups) save(op Op) error {
+	dst := op.Dst.Path()
+	if b.done[dst] { // first original wins: later writes this run only replace content this run wrote
+		return nil
+	}
+	if b.root == "" {
+		if err := os.MkdirAll(filepath.Dir(b.base), 0o755); err != nil {
+			return err
+		}
+		for n := 1; ; n++ {
+			r := b.base
+			if n > 1 {
+				r = fmt.Sprintf("%s-%d", b.base, n)
+			}
+			err := os.Mkdir(r, 0o755)
+			if err == nil {
+				b.root = r
+				break
+			}
+			if !errors.Is(err, fs.ErrExist) {
+				return err
+			}
+		}
+	}
+	name, ok := b.names[op.Dst.WT]
+	if !ok {
+		base := filepath.Base(op.Dst.WT)
+		name = base
+		for n := 2; slices.Contains(slices.Collect(maps.Values(b.names)), name); n++ {
+			name = fmt.Sprintf("%s-%d", base, n)
+		}
+		b.names[op.Dst.WT] = name
+	}
+	if err := copyFile(dst, filepath.Join(b.root, name, filepath.FromSlash(op.Dst.Rel))); err != nil {
+		return err
+	}
+	b.done[dst] = true
 	return nil
 }
 
-func applyOne(op Op, backupRoot string) error {
+func (b *backups) applyOne(op Op) error {
 	dst := op.Dst.Path()
 	if op.Kind == Copy {
 		// checked before the backup so a bad op leaves nothing behind
@@ -104,12 +159,8 @@ func applyOne(op Op, backupRoot string) error {
 	case info.IsDir():
 		return fmt.Errorf("%s is a directory", dst)
 	default:
-		bk := filepath.Join(backupRoot, filepath.Base(op.Dst.WT), filepath.FromSlash(op.Dst.Rel))
-		// keep the first backup: a later overwrite in the same run only replaces content this run wrote
-		if _, err := os.Lstat(bk); errors.Is(err, fs.ErrNotExist) {
-			if err := copyFile(dst, bk); err != nil {
-				return fmt.Errorf("backup failed: %w", err)
-			}
+		if err := b.save(op); err != nil {
+			return fmt.Errorf("backup failed: %w", err)
 		}
 	}
 	if op.Kind == Delete {

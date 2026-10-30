@@ -26,7 +26,7 @@ func TestApplyBacksUpBeforeOverwrite(t *testing.T) {
 	os.Chtimes(filepath.Join(feat, settings), mt, mt)
 	os.Chmod(filepath.Join(feat, settings), 0o600)
 	backup := filepath.Join(tmp, "bk")
-	err := Apply([]Op{cp(feat, main, settings)}, backup)
+	_, err := Apply([]Op{cp(feat, main, settings)}, backup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,14 +40,14 @@ func TestApplyBacksUpBeforeOverwrite(t *testing.T) {
 	}
 	// a new file needs no backup, and none is created
 	b2 := filepath.Join(tmp, "bk2")
-	if err := Apply([]Op{cp(feat, filepath.Join(tmp, "feat2"), settings)}, b2); err != nil {
+	if _, err := Apply([]Op{cp(feat, filepath.Join(tmp, "feat2"), settings)}, b2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(b2); !os.IsNotExist(err) {
 		t.Fatalf("backup dir created without need: %v", err)
 	}
 	// delete backs up too
-	if err := Apply([]Op{{Kind: Delete, Dst: Loc{main, settings}}}, b2); err != nil {
+	if _, err := Apply([]Op{{Kind: Delete, Dst: Loc{main, settings}}}, b2); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, filepath.Join(b2, "main", settings)) != "new" {
@@ -64,7 +64,7 @@ func TestApplyStopsOnError(t *testing.T) {
 	os.Chmod(ro, 0o555)
 	t.Cleanup(func() { os.Chmod(ro, 0o755) })
 	backup := filepath.Join(tmp, "bk")
-	err := Apply([]Op{cp(main, feat, settings), cp(main, feat2, settings), cp(main, feat3, settings)}, backup)
+	_, err := Apply([]Op{cp(main, feat, settings), cp(main, feat2, settings), cp(main, feat3, settings)}, backup)
 	if err == nil || !strings.Contains(err.Error(), backup) {
 		t.Fatalf("err = %v, want mention of %s", err, backup)
 	}
@@ -86,7 +86,7 @@ func TestApplyMissingSourceIsError(t *testing.T) {
 	tmp := t.TempDir()
 	main, feat := filepath.Join(tmp, "main"), filepath.Join(tmp, "feat")
 	put(t, filepath.Join(feat, settings), "keep")
-	err := Apply([]Op{cp(main, feat, settings)}, filepath.Join(tmp, "bk"))
+	_, err := Apply([]Op{cp(main, feat, settings)}, filepath.Join(tmp, "bk"))
 	if err == nil {
 		t.Fatal("copy from a missing source must fail")
 	}
@@ -133,7 +133,7 @@ func TestResolveR4RechecksSameAfterEarlierAnswer(t *testing.T) {
 	}
 	pr = &scripted{t: t, answers: []int{1}} // Keep feat; feat2 is then identical and must not be asked
 	ops := Resolve(p, pr)
-	if err := Apply(ops, filepath.Join(tmp, "bk")); err != nil {
+	if _, err := Apply(ops, filepath.Join(tmp, "bk")); err != nil {
 		t.Fatal(err)
 	}
 	for _, w := range []string{main, feat, feat2} {
@@ -156,7 +156,7 @@ func TestApplyBacksUpThirdWorktreeOnKeepA(t *testing.T) {
 	files := []FileState{fstate(settings, s(100, 1), s(100, 1), map[string]Stat{feat: s(200, 1), feat2: s(200, 1), feat3: s(200, 1)})}
 	p := BuildPlan(main, []string{feat, feat2, feat3}, files, SameFile)
 	backup := filepath.Join(tmp, "bk")
-	if err := Apply(Resolve(p, &scripted{t: t, answers: []int{0}}), backup); err != nil {
+	if _, err := Apply(Resolve(p, &scripted{t: t, answers: []int{0}}), backup); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, filepath.Join(feat3, settings)) != "A" {
@@ -180,5 +180,40 @@ func TestPruneEmptyDirs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "w", "other", "empty")); err != nil {
 		t.Fatal("pruned outside copy paths")
+	}
+}
+
+func TestApplySameNamedWorktreesBothBackedUp(t *testing.T) {
+	tmp := t.TempDir()
+	main, a, b := filepath.Join(tmp, "main"), filepath.Join(tmp, "feat"), filepath.Join(tmp, "team", "feat")
+	put(t, filepath.Join(main, settings), "M")
+	put(t, filepath.Join(a, settings), "A")
+	put(t, filepath.Join(b, settings), "B")
+	backup := filepath.Join(tmp, "bk")
+	used, err := Apply([]Op{cp(main, a, settings), cp(main, b, settings), cp(main, a, settings)}, backup)
+	if err != nil || used != backup {
+		t.Fatalf("used=%q err=%v", used, err)
+	}
+	if read(t, filepath.Join(backup, "feat", settings)) != "A" || read(t, filepath.Join(backup, "feat-2", settings)) != "B" {
+		t.Fatal("same-named worktrees did not get their own backups")
+	}
+}
+
+func TestApplyNeverReusesExistingBackupRoot(t *testing.T) {
+	tmp := t.TempDir()
+	main, feat := filepath.Join(tmp, "main"), filepath.Join(tmp, "feat")
+	put(t, filepath.Join(main, settings), "new")
+	put(t, filepath.Join(feat, settings), "orig")
+	backup := filepath.Join(tmp, "bk")
+	put(t, filepath.Join(backup, "feat", settings), "stale") // e.g. an earlier run in the same second
+	used, err := Apply([]Op{cp(main, feat, settings)}, backup)
+	if err != nil || used != backup+"-2" {
+		t.Fatalf("used=%q err=%v", used, err)
+	}
+	if read(t, filepath.Join(backup, "feat", settings)) != "stale" || read(t, filepath.Join(used, "feat", settings)) != "orig" {
+		t.Fatal("existing backup root reused")
+	}
+	if used, _ := Apply(nil, backup); used != "" {
+		t.Fatalf("no-op run reported backups %q", used)
 	}
 }
