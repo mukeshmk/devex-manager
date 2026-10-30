@@ -85,7 +85,7 @@ fi
 
 # 2. Remove Git aliases
 echo -e "\n${YELLOW}Would you like to remove the Git aliases installed by DevEx Manager?${NC}"
-read -p "(y/n) " -n 1 -r
+read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ "$IS_REMOTE" = true ]; then
