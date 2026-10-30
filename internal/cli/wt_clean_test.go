@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 // cleanFix mirrors tests/test_clean.sh: stale-merged, stale-deleted and active-unmerged worktrees.

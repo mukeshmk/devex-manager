@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 func runWt(t *testing.T, args ...string) (int, string, string) {

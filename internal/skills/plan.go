@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
 )
 
 type Update struct{ Skill, From, FromDir, To, ToDir string }

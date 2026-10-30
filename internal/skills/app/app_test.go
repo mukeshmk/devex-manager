@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
 )
 
 var t0 = time.Date(2026, 5, 27, 21, 0, 0, 0, time.Local)

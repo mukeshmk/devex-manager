@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 func ctxRun(t *testing.T, cwd, stdin string, args ...string) (int, string, string) {

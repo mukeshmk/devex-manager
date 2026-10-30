@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
 )
 
 type Copy struct {

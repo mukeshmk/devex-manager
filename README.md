@@ -245,7 +245,7 @@ The installer optionally includes Python virtual environment automation that:
 
 ## Optional Git Aliases
 
-Handy shortcuts installed via the `git-aliases/install-git-aliases.sh` module.
+Handy shortcuts installed via the `shell/git-aliases/install.sh` module.
 
 | Alias | Expands To | Description |
 |---|---|---|

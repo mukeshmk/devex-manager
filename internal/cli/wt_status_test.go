@@ -9,7 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 func TestStatusCommand(t *testing.T) {

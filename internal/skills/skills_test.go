@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
 )
 
 func write(t *testing.T, path, content string, mt time.Time) {

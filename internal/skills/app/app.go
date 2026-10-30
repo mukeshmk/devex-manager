@@ -11,9 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 	"github.com/mukeshmk/devex-manager/internal/skills"
-	"github.com/mukeshmk/devex-manager/internal/ui"
 )
 
 const (

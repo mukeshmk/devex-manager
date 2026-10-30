@@ -11,11 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/ctx"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/testutil"
-	"github.com/mukeshmk/devex-manager/internal/wt"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/worktree"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 // start builds the app on a fixture with DEVX-1 and DEVX-2, loaded and sized, recording execs into got.

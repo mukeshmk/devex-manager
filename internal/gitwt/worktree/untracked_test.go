@@ -3,7 +3,7 @@ package wt
 import (
 	"testing"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
 )
 
 // Files sync never copies must stay "dirty" even under a copy path, or rm would delete them unseen.

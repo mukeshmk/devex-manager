@@ -56,9 +56,9 @@ read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ "$IS_REMOTE" = true ]; then
-        curl -fsSL "$REPO_RAW_URL/git-aliases/uninstall-git-aliases.sh" | bash
+        curl -fsSL "$REPO_RAW_URL/shell/git-aliases/uninstall.sh" | bash
     else
-        bash "$SCRIPT_DIR/git-aliases/uninstall-git-aliases.sh"
+        bash "$SCRIPT_DIR/shell/git-aliases/uninstall.sh"
     fi
 else
     echo "Skipping Git aliases removal."

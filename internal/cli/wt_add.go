@@ -8,10 +8,10 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/ui"
-	"github.com/mukeshmk/devex-manager/internal/wt"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/worktree"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
 
 func init() {

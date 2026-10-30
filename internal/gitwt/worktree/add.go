@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
 // Add creates (or checks out) a worktree for branch and wires up symlinks and copies from main.

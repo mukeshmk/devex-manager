@@ -1,9 +1,9 @@
 package wt
 
 import (
-	"github.com/mukeshmk/devex-manager/internal/config"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/wtsync"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/sync"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
 // Candidate is a stale worktree `git wt clean` offers to remove.
