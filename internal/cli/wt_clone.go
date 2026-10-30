@@ -16,9 +16,13 @@ func init() {
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(c *cobra.Command, args []string) error {
 			errw := c.ErrOrStderr()
-			if len(args) == 0 {
-				fmt.Fprintln(errw, colours(errw).red.Render("Error: Git repository URL is required"))
-				fmt.Fprintln(errw, "Usage: git wt-clone <url>")
+			if len(args) != 1 {
+				msg := "Error: Git repository URL is required"
+				if len(args) > 1 {
+					msg = "Error: Too many arguments specified"
+				}
+				fmt.Fprintln(errw, colours(errw).red.Render(msg))
+				fmt.Fprintln(errw, "Usage: git wt clone <url>")
 				return errExit1
 			}
 			cwd, err := os.Getwd()

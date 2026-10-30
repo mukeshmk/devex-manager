@@ -34,7 +34,7 @@ func init() {
 			return errExit1
 		}
 		return withSkills(c, nil, "", func(s *skillsRun) error {
-			if f, ok := s.out.(*os.File); ok && ui.IsTTY(f) && ui.IsTTY(s.in) {
+			if interactive(c) {
 				if err := skillsapp.Run(skillsapp.New(s.cfg)); err != nil {
 					return s.fail(err)
 				}

@@ -62,11 +62,6 @@ func nbExec(c *cobra.Command, name string, args ...string) error {
 	return nil
 }
 
-// exitCode carries a child process exit status; Run returns it as the exit code.
-type exitCode int
-
-func (e exitCode) Error() string { return "exit " + fmt.Sprint(int(e)) }
-
 func nbStrip(c *cobra.Command, args []string) error {
 	out, errw := c.OutOrStdout(), c.ErrOrStderr()
 	blue, green, _, red := nbStyles(out)

@@ -13,10 +13,15 @@ Usage: git wt <command> [arguments]
 Available commands:
   clone   - Initialize bare repo & main worktree
   add     - Create/checkout worktree (by branch prefix)
-  rm      - Delete worktree folder & local branch (supports: --force, -f)
+  rm      - Delete worktree folder & local branch
+            -f, --force   skip the sync and unsaved-work checks
   clean   - Interactively remove stale worktrees
+            -y, --yes     remove the preselected (safe) ones without asking
   status  - Rich status overview (alias: list)
   sync    - Synchronize configuration copies
+            -c, --check   only report files that are out of sync
+            --dry-run     show the plan without changing anything
+            -y, --yes     skip the confirmation
 
 Native Git Commands Pass-through:
   lock, move, prune, repair, unlock
@@ -45,7 +50,7 @@ func Passthrough(args []string) (gitArgs []string, ok bool) {
 }
 
 func NewGitWtRoot() *cobra.Command {
-	root := &cobra.Command{Use: "git-wt", Args: cobra.ArbitraryArgs}
+	root := &cobra.Command{Use: "git-wt", Version: Version, Args: cobra.ArbitraryArgs}
 	root.SetHelpFunc(func(c *cobra.Command, _ []string) {
 		if c == root {
 			fmt.Fprint(c.OutOrStdout(), gitWtHelp)
