@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/wtsync"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/sync"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
 // Safety is what deleting a worktree and its branch would lose.

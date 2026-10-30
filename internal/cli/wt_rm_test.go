@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
 func (s *syncFix) rm(t *testing.T, args ...string) (int, string) {

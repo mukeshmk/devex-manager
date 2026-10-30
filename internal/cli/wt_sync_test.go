@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
 type syncFix struct {

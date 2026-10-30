@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mukeshmk/devex-manager/internal/wt"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/worktree"
 )
 
 func init() {

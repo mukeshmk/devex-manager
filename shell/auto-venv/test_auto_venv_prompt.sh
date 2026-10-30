@@ -22,7 +22,7 @@ chmod +x "$MOCK_DIR/uv"
 export PATH="$MOCK_DIR:$PATH"
 
 # Copy the script to a temp location to source it safely
-cp auto-venv/auto-venv.sh "$MOCK_DIR/auto-venv.sh"
+cp "$(dirname "$0")/auto-venv.sh" "$MOCK_DIR/auto-venv.sh"
 
 # Mock cd to avoid actual directory changes during sourcing
 cd() {

@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
-	"github.com/mukeshmk/devex-manager/internal/gitx"
-	"github.com/mukeshmk/devex-manager/internal/testutil"
-	"github.com/mukeshmk/devex-manager/internal/ui"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
 
 func read(t *testing.T, path string) string {

@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/mukeshmk/devex-manager/internal/nb"
-	"github.com/mukeshmk/devex-manager/internal/ui"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
 
 const nbUsage = `Usage: dx nb <command> [arguments]

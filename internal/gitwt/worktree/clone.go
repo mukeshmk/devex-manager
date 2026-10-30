@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
 const confTemplate = `# DevEx Manager Configuration

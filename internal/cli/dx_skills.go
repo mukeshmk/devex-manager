@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 	"github.com/mukeshmk/devex-manager/internal/skills"
-	"github.com/mukeshmk/devex-manager/internal/skillsapp"
-	"github.com/mukeshmk/devex-manager/internal/ui"
+	"github.com/mukeshmk/devex-manager/internal/skills/app"
 )
 
 // Overridden in tests so the real ~/.devex.conf and environment are never read.

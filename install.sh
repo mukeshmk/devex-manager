@@ -93,7 +93,7 @@ ln -sf "$INSTALL_DIR/dx" "$INSTALL_DIR/git-wt"
 
 # 3. Shell completions
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
-fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
+fetch_file "shell/completions/git-wt.bash" "$WT_TOOLS_DIR/git-wt-completion.sh"
 if [[ "$SHELL" == */zsh ]]; then COMP_SHELL=zsh; else COMP_SHELL=bash; fi
 "$INSTALL_DIR/dx" completion "$COMP_SHELL" > "$WT_TOOLS_DIR/dx-completion.sh"
 
@@ -104,9 +104,9 @@ echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing Git aliases..."
     if [ "$IS_REMOTE" = true ]; then
-        curl -fsSL "$REPO_RAW_URL/git-aliases/install-git-aliases.sh" | bash
+        curl -fsSL "$REPO_RAW_URL/shell/git-aliases/install.sh" | bash
     else
-        bash "$SCRIPT_DIR/git-aliases/install-git-aliases.sh"
+        bash "$SCRIPT_DIR/shell/git-aliases/install.sh"
     fi
 else
     echo "Skipping Git aliases."
@@ -118,7 +118,7 @@ read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing auto-venv script..."
-    fetch_file "auto-venv/auto-venv.sh" "$WT_TOOLS_DIR/auto-venv.sh"
+    fetch_file "shell/auto-venv/auto-venv.sh" "$WT_TOOLS_DIR/auto-venv.sh"
     INSTALL_AUTO_VENV=true
     echo -e "${GREEN}✓ Auto-venv tools staged for installation!${NC}"
 else
