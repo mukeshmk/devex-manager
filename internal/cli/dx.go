@@ -20,6 +20,9 @@ var dxCmds = map[string][]*cobra.Command{}
 // registerDx lets later tasks attach subcommands to the skills, nb or ctx group.
 func registerDx(group string, cmd *cobra.Command) { dxCmds[group] = append(dxCmds[group], cmd) }
 
+// dxGroupRun optionally replaces a group's no-subcommand behaviour (default: help).
+var dxGroupRun = map[string]func(*cobra.Command, []string) error{}
+
 func NewDxRoot() *cobra.Command {
 	root := &cobra.Command{Use: "dx", Short: "DevEx Manager", Version: Version, Args: cobra.ArbitraryArgs}
 	root.RunE = func(c *cobra.Command, _ []string) error {
@@ -33,6 +36,9 @@ func NewDxRoot() *cobra.Command {
 	} {
 		grp := &cobra.Command{Use: g.name, Short: g.short, Args: cobra.ArbitraryArgs,
 			RunE: func(c *cobra.Command, _ []string) error { return c.Help() }}
+		if r := dxGroupRun[g.name]; r != nil {
+			grp.RunE = r
+		}
 		for _, c := range dxCmds[g.name] {
 			resetFlags(c)
 			grp.AddCommand(c)
