@@ -75,10 +75,15 @@ func withSkills(c *cobra.Command, args []string, needArg string, fn func(*skills
 	}
 	s := &skillsRun{in: in, out: c.OutOrStdout(), errw: c.ErrOrStderr()}
 	s.co, s.ce = colours(s.out), colours(s.errw)
-	if needArg != "" && len(args) == 0 {
+	if needArg != "" && (len(args) == 0 || args[0] == "") {
 		fmt.Fprintln(s.errw, s.ce.red.Render("Error: Skill name argument required."))
 		fmt.Fprintf(s.errw, "Usage: dx skills %s <skill_name>\n", needArg)
 		return errExit1
+	}
+	if needArg != "" {
+		if err := skills.ValidName(args[0]); err != nil {
+			return s.fail(err)
+		}
 	}
 	home, err := skillsHome()
 	if err != nil {
@@ -156,16 +161,16 @@ func (s *skillsRun) sync(yes bool) error {
 		return errExit1
 	}
 	fmt.Fprintln(s.out)
-	root, err := skills.ApplyUpdates(ups, s.cfg.MasterDir, time.Now())
+	root, done, err := skills.ApplyUpdates(ups, s.cfg.MasterDir, time.Now())
+	for _, u := range ups[:done] {
+		fmt.Fprintf(s.out, "  [sync] %s: %s -> %s... Done\n", u.Skill, u.From, u.To)
+	}
 	if err != nil {
 		fmt.Fprintln(s.errw, s.ce.red.Render(err.Error()))
 		if root != "" {
 			fmt.Fprintln(s.errw, "Backups stored in: "+root)
 		}
 		return errExit1
-	}
-	for _, u := range ups {
-		fmt.Fprintf(s.out, "  [sync] %s: %s -> %s... Done\n", u.Skill, u.From, u.To)
 	}
 	fmt.Fprintln(s.out, "\n"+s.co.green.Render("✓ Synchronization complete!"))
 	if root != "" { // nothing existed to back up: no backup dir was made

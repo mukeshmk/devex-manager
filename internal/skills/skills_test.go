@@ -93,7 +93,7 @@ func TestSkillsApplyMirrorsDeletes(t *testing.T) {
 	write(t, filepath.Join(to, "extra.txt"), "gone", time.Time{})
 	write(t, filepath.Join(to, "olddir/f"), "gone", time.Time{})
 	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.Local)
-	root, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, now)
+	root, _, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestSkillsApplyMirrorsDeletes(t *testing.T) {
 	}
 	// second run in the same second must not nest into the first backup
 	write(t, filepath.Join(to, "SKILL.md"), "changed", time.Time{})
-	root2, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, now)
+	root2, _, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, now)
 	if err != nil || root2 != root+"-2" {
 		t.Fatalf("root2 %s %v", root2, err)
 	}
@@ -130,7 +130,7 @@ func TestSkillsApplyBackupFailureSkips(t *testing.T) {
 	write(t, filepath.Join(from, "SKILL.md"), "new", t0)
 	write(t, filepath.Join(to, "SKILL.md"), "old", t0)
 	write(t, filepath.Join(cfg.MasterDir, ".backups"), "a file blocks backups", t0)
-	_, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, time.Now())
+	_, _, err := ApplyUpdates([]Update{{Skill: "a", From: "claude", FromDir: from, To: "master", ToDir: to}}, cfg.MasterDir, time.Now())
 	if err == nil || !strings.HasPrefix(err.Error(), "Error: ") {
 		t.Fatalf("want error, got %v", err)
 	}
@@ -182,5 +182,90 @@ func TestSkillsDiffAndTemplate(t *testing.T) {
 	}
 	if out, err := Diff(other, other); err != nil || out != "" {
 		t.Fatalf("same diff %q %v", out, err)
+	}
+}
+
+func TestSkillsInvalidNames(t *testing.T) {
+	cfg := fixture(t)
+	write(t, filepath.Join(cfg.MasterDir, "a/SKILL.md"), "m", t0)
+	for _, n := range []string{"", ".", "..", "a/b", "../x"} {
+		if l := Locations(cfg, n); l != nil {
+			t.Errorf("Locations(%q) = %v", n, l)
+		}
+		if _, err := Remove(cfg, n, time.Now()); err == nil {
+			t.Errorf("Remove(%q) succeeded", n)
+		}
+		if err := CreateTemplate(cfg.MasterDir, n); err == nil {
+			t.Errorf("CreateTemplate(%q) succeeded", n)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(cfg.MasterDir, "a/SKILL.md")); err != nil {
+		t.Fatal("master damaged")
+	}
+	if _, err := os.Stat(filepath.Join(cfg.MasterDir, ".backups")); err == nil {
+		t.Fatal("backup written for an invalid name")
+	}
+}
+
+func TestSkillsApplySymlinkedFrom(t *testing.T) {
+	cfg := fixture(t)
+	real := filepath.Join(t.TempDir(), "real")
+	write(t, filepath.Join(real, "SKILL.md"), "new", t0)
+	from, to := filepath.Join(cfg.Tools[0].Dir, "a"), filepath.Join(cfg.MasterDir, "a")
+	os.Symlink(real, from)
+	write(t, filepath.Join(to, "SKILL.md"), "old", t0)
+	if _, _, err := ApplyUpdates([]Update{{"a", "claude", from, "master", to}}, cfg.MasterDir, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Lstat(to); err != nil || !st.IsDir() {
+		t.Fatalf("dest not a real dir: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(to, "SKILL.md")); string(b) != "new" {
+		t.Fatalf("dest %q", b)
+	}
+}
+
+func TestSkillsApplySymlinkedTo(t *testing.T) {
+	cfg := fixture(t)
+	from := filepath.Join(cfg.MasterDir, "a")
+	write(t, filepath.Join(from, "SKILL.md"), "new", t0)
+	real := filepath.Join(t.TempDir(), "real")
+	write(t, filepath.Join(real, "SKILL.md"), "old", t0)
+	write(t, filepath.Join(real, "extra"), "x", t0)
+	to := filepath.Join(cfg.Tools[0].Dir, "a")
+	os.Symlink(real, to)
+	root, _, err := ApplyUpdates([]Update{{"a", "master", from, "claude", to}}, cfg.MasterDir, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bk := filepath.Join(root, "claude/a")
+	if st, err := os.Lstat(bk); err != nil || !st.IsDir() {
+		t.Fatalf("backup not a real dir: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(bk, "SKILL.md")); string(b) != "old" {
+		t.Fatalf("backup content %q", b)
+	}
+	// mirrored through the link into its target, like rsync "src/" "dst/"
+	if st, _ := os.Lstat(to); st.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("dest symlink replaced")
+	}
+	if b, _ := os.ReadFile(filepath.Join(real, "SKILL.md")); string(b) != "new" {
+		t.Fatalf("target %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(real, "extra")); err == nil {
+		t.Fatal("extra not deleted in target")
+	}
+}
+
+func TestSkillsApplyReportsDone(t *testing.T) {
+	cfg := fixture(t)
+	from := filepath.Join(cfg.MasterDir, "a")
+	write(t, filepath.Join(from, "SKILL.md"), "new", t0)
+	write(t, filepath.Join(cfg.Tools[1].Dir, "blocker"), "file", t0)
+	ups := []Update{{"a", "master", from, "claude", filepath.Join(cfg.Tools[0].Dir, "a")},
+		{"a", "master", from, "kiro", filepath.Join(cfg.Tools[1].Dir, "blocker/a")}}
+	_, done, err := ApplyUpdates(ups, cfg.MasterDir, time.Now())
+	if err == nil || done != 1 {
+		t.Fatalf("done=%d err=%v", done, err)
 	}
 }

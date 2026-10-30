@@ -52,26 +52,36 @@ func (b *backupRoot) save(dir string, rel ...string) error {
 }
 
 // ApplyUpdates backs up each existing destination, then mirrors FromDir onto ToDir
-// (rsync -a --delete). Stops at the first error; returns the backup root used ("" if none).
-func ApplyUpdates(ups []Update, master string, now time.Time) (string, error) {
+// (rsync -a --delete). Stops at the first error; returns the backup root used ("" if none) and
+// how many updates completed.
+func ApplyUpdates(ups []Update, master string, now time.Time) (string, int, error) {
 	b := newBackupRoot(master, now)
-	for _, u := range ups {
+	for i, u := range ups {
 		if isDir(u.ToDir) {
 			if err := b.save(u.ToDir, u.To, u.Skill); err != nil {
-				return b.root, fmt.Errorf("Error: backup of %s failed, %s not synced: %w", u.ToDir, u.Skill, err)
+				return b.root, i, fmt.Errorf("Error: backup of %s failed, %s not synced: %w", u.ToDir, u.Skill, err)
 			}
 		}
 		if err := mirror(u.FromDir, u.ToDir); err != nil {
-			return b.root, fmt.Errorf("Error: sync of %s from %s to %s failed: %w", u.Skill, u.From, u.To, err)
+			return b.root, i, fmt.Errorf("Error: sync of %s from %s to %s failed: %w", u.Skill, u.From, u.To, err)
 		}
 	}
-	return b.root, nil
+	return b.root, len(ups), nil
 }
 
 // mirror makes dst an exact copy of src: files, symlinks, modes and mtimes; extras in dst are deleted.
+// Symlinked roots are followed (rsync "src/" "dst/"): a linked source copies real content, and a
+// linked destination is mirrored into its target rather than replaced.
 func mirror(src, dst string) error {
+	src, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		return err
+	}
+	if r, err := filepath.EvalSymlinks(dst); err == nil {
+		dst = r
+	}
 	var dirs []string
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

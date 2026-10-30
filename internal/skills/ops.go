@@ -14,6 +14,9 @@ import (
 // Remove backs up every copy to <root>/deleted/<location>/<name>, then deletes them all
 // (dx-skills-rm). Nothing is deleted unless every backup succeeded.
 func Remove(cfg config.SkillsConfig, name string, now time.Time) (string, error) {
+	if err := ValidName(name); err != nil {
+		return "", err
+	}
 	locs := Locations(cfg, name)
 	if len(locs) == 0 {
 		return "", fmt.Errorf("Error: Skill '%s' not found.", name)
@@ -43,6 +46,9 @@ func Diff(dirA, dirB string) (string, error) {
 
 // CreateTemplate writes <dir>/<name>/SKILL.md with the dx-skills-edit template.
 func CreateTemplate(dir, name string) error {
+	if err := ValidName(name); err != nil {
+		return err
+	}
 	d := filepath.Join(dir, name)
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		return err
