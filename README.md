@@ -49,7 +49,8 @@ After installing, open a new terminal or run `source ~/.zshrc` (or your respecti
 - Errors go to stderr.
 - `git wt clean` skips dirty worktrees by default (see [Dirty-worktree refusal](#dirty-worktree-refusal)).
 - `git wt sync` shows a plan first and backs up files before overwriting or deleting them.
-- With no terminal, prompts read stdin and EOF means "no" (nothing destructive happens). `--yes/-y` accepts a plan.
+- With no terminal, `git wt sync` does not read stdin: it applies the plan with each question's default (conflicts default to "Resolve Later"). Other prompts (`git wt clean`, `dx skills`, `dx ctx`) read stdin, and EOF means "no" (nothing destructive happens). `--yes/-y` accepts a plan.
+- `git wt rm <name>` matches an exact worktree path first, then a folder name, then a branch name. A partial branch name is refused with a "Did you mean" list instead of deleting the first match.
 
 ---
 
@@ -117,7 +118,7 @@ Before sync overwrites or deletes any file, the old version is copied to `$(git 
 
 #### Dirty-worktree refusal
 
-A worktree is dirty if it has uncommitted changes, or its branch never had an upstream and has commits that exist on no remote. `git wt clean` leaves dirty worktrees unselected (you must tick them explicitly) and `git wt rm` refuses them without `--force`. The current worktree, the main worktree and the base branch are never deleted.
+A worktree is dirty if it has uncommitted changes (untracked files at or under a configured copy path, and configured symlinks that are real symlinks, do not count), or commits that are on no remote, unless the branch is merged into the base branch or its upstream branch was deleted. `git wt clean` leaves dirty worktrees unselected (you must tick them explicitly) and `git wt rm` refuses them without `--force` (which also skips the sync check). When the upstream is gone but local commits remain, the worktree is still preselected, and `clean` and the app show how many local commits are not on any remote. The current worktree, the main worktree and the base branch are never deleted.
 
 ### Full-screen apps
 
@@ -137,7 +138,7 @@ On a terminal, two commands open a full-screen app. Piped or scripted, they prin
 | `r` | Refresh |
 | `q` | Quit |
 
-**`dx skills` / `dx skills list`**: grid of skills (rows) by master and each tool (columns), with a diff of the selected skill alongside.
+**`dx skills`** (no subcommand): grid of skills (rows) by master and each tool (columns), with a diff of the selected skill alongside.
 
 | Key | Action |
 |---|---|
@@ -218,7 +219,8 @@ If the file `~/.devex.conf` is missing or contains template placeholders (such a
 
 ### Commands
 
-- **`dx skills [list]`**: Opens the full-screen grid on a terminal; otherwise prints a table of all skills, their descriptions (extracted from prompt frontmatter), update states, and last modification times.
+- **`dx skills`**: Opens the full-screen grid on a terminal; otherwise behaves like `dx skills list`.
+- **`dx skills list`**: Always prints a table of all skills, their descriptions (extracted from prompt frontmatter), update states, and last modification times.
 - **`dx skills sync`**: Compares skill folders across all registered tools. Displays a preview of pending bidirectional syncs and executes them with automatic safety backups upon confirmation (`--yes`/`-y` accepts).
 - **`dx skills diff <skill>`**: Shows a recursive folder diff between target versions.
 - **`dx skills edit <skill>`**: Opens the master version of the skill in your `$EDITOR` and triggers a sync automatically after saving.
