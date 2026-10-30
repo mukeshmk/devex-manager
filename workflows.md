@@ -53,7 +53,9 @@ flowchart TD
     Run([Run git wt sync]) --> LockCheck{Conflict markers in main?}
     LockCheck -- Yes --> Block[Abort Sync with error]
     LockCheck -- No --> ScanWTs[Scan active worktrees & manifest]
-    ScanWTs --> EvalRules{Evaluate rules per file}
+    ScanWTs --> Plan[Build full plan, show it, confirm or --dry-run]
+    Plan --> Backup[Back up files before overwrite/delete]
+    Backup --> EvalRules{Evaluate rules per file}
     
     EvalRules -- "Untouched everywhere" --> Skip[Skip file]
     EvalRules -- "Modified in Main or single WT" --> SilentlyPropagate[Propagate changes to all worktrees]
