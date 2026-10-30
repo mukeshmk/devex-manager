@@ -29,3 +29,6 @@ tests/
 
 # Brainstorm mockups
 .superpowers/
+
+# Go build output
+/dist/
