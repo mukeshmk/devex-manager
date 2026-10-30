@@ -29,7 +29,7 @@ Go tests use temp git repos (`internal/testutil`) with an isolated git env (`GIT
 
 ## Architecture
 
-One binary, two names: `~/.local/bin/dx`, and `git-wt` a symlink to it (found by git's subcommand discovery as `git wt`). `cmd/dx/main.go` sets `cli.Version` and calls `cli.Main`, which dispatches on `argv[0]`. Unrecognised `git wt` verbs (`lock`, `move`, `prune`, `repair`, `unlock`; `list` with args) pass through to native `git worktree`; `git wt` with no args or `status` opens the full-screen app on a TTY. Non-TTY never opens a full-screen app and never blocks; prompts read stdin and EOF means "no".
+One binary, two names: `~/.local/bin/dx`, and `git-wt` a symlink to it (found by git's subcommand discovery as `git wt`). `cmd/dx/main.go` sets `cli.Version` and calls `cli.Main`, which dispatches on `argv[0]`. Unrecognised `git wt` verbs (`lock`, `move`, `prune`, `repair`, `unlock`; `list` with args) pass through to native `git worktree`; `git wt` with no args or `status` opens the full-screen app on a TTY. Non-TTY never opens a full-screen app and never blocks: `git wt sync` takes each question's default without reading stdin; other prompts read stdin and EOF means "no".
 
 Packages under `internal/`:
 
@@ -43,7 +43,7 @@ Packages under `internal/`:
 - `nb` — notebook strip/kernel/diff/list.
 - `skills` — skill scan, plan, apply, backups, diff/rm/edit ops.
 - `skillsapp` — Bubble Tea full-screen skills grid.
-- `ui` — width-aware tables (lipgloss), prompts, TTY detection.
+- `ui` — width-aware tables (lipgloss), the shared `Fit`/`Box` helpers for both apps, prompts, TTY detection.
 - `testutil` — temp git repo helpers for tests.
 
 Full-screen actions that re-invoke the binary force argv0 `git-wt`. Charm stack: lipgloss, huh, bubbletea, bubbles (keep current majors).
@@ -63,7 +63,7 @@ CLI arguments > `.devex.conf` (repo-root for `git wt`, `~/.devex.conf` `[skills]
 
 ### Worktree deletion safety
 
-`git wt clean` and `git wt rm` check that configured copy paths are in sync across worktrees before deleting anything; if not, they abort and point at `git wt sync` (`rm --force` skips only this check). They also refuse dirty worktrees (uncommitted changes, or a never-upstreamed branch with commits on no remote) unless ticked in `clean` or `--force` for `rm`. Never delete the current worktree, the main worktree or the base branch. Don't bypass these checks when modifying deletion paths.
+`git wt clean` and `git wt rm` check that configured copy paths are in sync across worktrees before deleting anything; if not, they abort and point at `git wt sync` They also refuse dirty worktrees (uncommitted changes (untracked files at or under a configured copy path, and configured symlinks that are real symlinks, do not count), or commits that are on no remote, unless the branch is merged into the base branch or its upstream branch was deleted) unless ticked in `clean` or `--force` for `rm`; `rm --force` skips both the sync check and the dirty refusal. `rm` resolves its target as exact path, then folder name, then branch, and never falls back to a prefix match. Never delete the current worktree, the main worktree or the base branch. Don't bypass these checks when modifying deletion paths.
 
 ### Style conventions
 
