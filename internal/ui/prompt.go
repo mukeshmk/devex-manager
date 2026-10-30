@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,12 +16,17 @@ type Prompter interface {
 	Confirm(q string, def bool) bool
 	Choose(q string, options []string, def int) int
 	MultiSelect(q string, options []string, preselected []bool) []bool
+	// Aborted reports whether the user cancelled a prompt (Ctrl+C); that answer was the safe default.
+	Aborted() bool
 }
+
+func (LinePrompter) Aborted() bool    { return false }
+func (DefaultPrompter) Aborted() bool { return false }
 
 // NewPrompter returns a huh-based prompter when in is a TTY, else a LinePrompter.
 func NewPrompter(in *os.File, out io.Writer) Prompter {
 	if IsTTY(in) {
-		return huhPrompter{in: in, out: out}
+		return &huhPrompter{in: in, out: out}
 	}
 	return LinePrompter{R: bufio.NewReader(in), W: out}
 }
@@ -105,15 +111,22 @@ func (DefaultPrompter) MultiSelect(_ string, options []string, pre []bool) []boo
 }
 
 type huhPrompter struct {
-	in  *os.File
-	out io.Writer
+	in      *os.File
+	out     io.Writer
+	aborted bool
 }
 
-func (p huhPrompter) run(f huh.Field) error {
-	return huh.NewForm(huh.NewGroup(f)).WithInput(p.in).WithOutput(p.out).Run()
+func (p *huhPrompter) Aborted() bool { return p.aborted }
+
+func (p *huhPrompter) run(f huh.Field) error {
+	err := huh.NewForm(huh.NewGroup(f)).WithInput(p.in).WithOutput(p.out).Run()
+	if errors.Is(err, huh.ErrUserAborted) {
+		p.aborted = true
+	}
+	return err
 }
 
-func (p huhPrompter) Confirm(q string, def bool) bool {
+func (p *huhPrompter) Confirm(q string, def bool) bool {
 	v := def
 	if p.run(huh.NewConfirm().Title(q).Value(&v)) != nil {
 		return false
@@ -121,7 +134,7 @@ func (p huhPrompter) Confirm(q string, def bool) bool {
 	return v
 }
 
-func (p huhPrompter) Choose(q string, options []string, def int) int {
+func (p *huhPrompter) Choose(q string, options []string, def int) int {
 	v := def
 	opts := make([]huh.Option[int], len(options))
 	for i, o := range options {
@@ -133,7 +146,7 @@ func (p huhPrompter) Choose(q string, options []string, def int) int {
 	return v
 }
 
-func (p huhPrompter) MultiSelect(q string, options []string, pre []bool) []bool {
+func (p *huhPrompter) MultiSelect(q string, options []string, pre []bool) []bool {
 	res := make([]bool, len(options))
 	var sel []int
 	opts := make([]huh.Option[int], len(options))

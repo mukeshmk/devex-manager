@@ -40,6 +40,7 @@ func TestScan(t *testing.T) {
 	put(t, main+"/my conf/a b.json", "12345")
 	put(t, feat+"/my conf/sub/c.json", "c")
 	put(t, feat+"/my conf/a b.json.devex-conflict-x", "skip")
+	put(t, feat+"/my conf/.a b.json.devex-tmp-123456", "crash leftover") // M3
 	put(t, feat+"/.env", "E=1")
 	put(t, root+"/elsewhere/linked.json", "no")
 	if err := os.Symlink(root+"/elsewhere", main+"/my conf/link"); err != nil {

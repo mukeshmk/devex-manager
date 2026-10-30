@@ -1,11 +1,17 @@
 package wtsync
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mukeshmk/devex-manager/internal/config"
+	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/testutil"
+	"github.com/mukeshmk/devex-manager/internal/ui"
 )
 
 func read(t *testing.T, path string) string {
@@ -99,6 +105,7 @@ func TestApplyMissingSourceIsError(t *testing.T) {
 type scripted struct {
 	t       *testing.T
 	answers []int
+	abort   bool // set once an answer of -1 is given, like Ctrl+C in huh
 }
 
 func (s *scripted) next(q string) int {
@@ -108,9 +115,14 @@ func (s *scripted) next(q string) int {
 	}
 	a := s.answers[0]
 	s.answers = s.answers[1:]
+	if a < 0 {
+		s.abort = true
+		return 0
+	}
 	return a
 }
 func (s *scripted) Confirm(q string, _ bool) bool                     { return s.next(q) == 0 }
+func (s *scripted) Aborted() bool                                     { return s.abort }
 func (s *scripted) Choose(q string, _ []string, _ int) int            { return s.next(q) }
 func (s *scripted) MultiSelect(q string, _ []string, _ []bool) []bool { s.next(q); return nil }
 
@@ -132,7 +144,7 @@ func TestResolveR4RechecksSameAfterEarlierAnswer(t *testing.T) {
 		t.Fatal("second R4 conflict not asked after Resolve Later")
 	}
 	pr = &scripted{t: t, answers: []int{1}} // Keep feat; feat2 is then identical and must not be asked
-	ops := Resolve(p, pr)
+	ops, _ := Resolve(p, pr)
 	if _, err := Apply(ops, filepath.Join(tmp, "bk")); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +168,7 @@ func TestApplyBacksUpThirdWorktreeOnKeepA(t *testing.T) {
 	files := []FileState{fstate(settings, s(100, 1), s(100, 1), map[string]Stat{feat: s(200, 1), feat2: s(200, 1), feat3: s(200, 1)})}
 	p := BuildPlan(main, []string{feat, feat2, feat3}, files, SameFile)
 	backup := filepath.Join(tmp, "bk")
-	if _, err := Apply(Resolve(p, &scripted{t: t, answers: []int{0}}), backup); err != nil {
+	if _, err := Apply(mustResolve(t, p, &scripted{t: t, answers: []int{0}}), backup); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, filepath.Join(feat3, settings)) != "A" {
@@ -215,5 +227,79 @@ func TestApplyNeverReusesExistingBackupRoot(t *testing.T) {
 	}
 	if used, _ := Apply(nil, backup); used != "" {
 		t.Fatalf("no-op run reported backups %q", used)
+	}
+}
+
+func mustResolve(t *testing.T, p Plan, pr ui.Prompter) []Op {
+	t.Helper()
+	ops, err := Resolve(p, pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ops
+}
+
+// M2: Ctrl+C at a conflict prompt aborts the whole sync; later questions are not asked.
+func TestResolveAbort(t *testing.T) {
+	tmp := t.TempDir()
+	main, feat, feat2 := filepath.Join(tmp, "main"), filepath.Join(tmp, "feat"), filepath.Join(tmp, "feat2")
+	put(t, filepath.Join(main, settings), "M")
+	put(t, filepath.Join(feat, settings), "A")
+	put(t, filepath.Join(feat2, settings), "B")
+	files := []FileState{fstate(settings, s(100, 1), s(200, 1), map[string]Stat{feat: s(200, 1), feat2: s(200, 1)})}
+	p := BuildPlan(main, []string{feat, feat2}, files, SameFile)
+	ops, err := Resolve(p, &scripted{t: t, answers: []int{-1}}) // a second question would fail the test
+	if !errors.Is(err, ErrAborted) || ops != nil {
+		t.Fatalf("ops=%v err=%v", ops, err)
+	}
+}
+
+// M1: after a main-vs-A conflict, untouched and missing worktrees get main's version and --check is clean.
+func TestSyncFansOutToUntouchedAfterConflict(t *testing.T) {
+	f := testutil.NewRepo(t)
+	main := filepath.Join(f.Root, "main")
+	a, b, c := f.AddWorktree(t, "a", "a"), f.AddWorktree(t, "b", "b"), f.AddWorktree(t, "c", "c")
+	cfg := config.RepoConfig{BaseBranch: "main", MainWorktreeName: "main", CopyPaths: []string{".vscode"}}
+	repo, err := gitx.Open(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{main, a, b} {
+		put(t, filepath.Join(w, settings), "base")
+	}
+	sync := func(answers ...int) {
+		t.Helper()
+		ss, err := Session(repo, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Apply(mustResolve(t, ss.Plan(), &scripted{t: t, answers: answers}), filepath.Join(f.Tmp, "bk")); err != nil {
+			t.Fatal(err)
+		}
+		if err := ss.RebuildManifest(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sync() // first sync: c never had the file (missing) and must get it
+	if got := read(t, filepath.Join(c, settings)); got != "base" {
+		t.Fatalf("missing worktree c = %q after first sync", got)
+	}
+	later := time.Now().Add(time.Hour)
+	for w, v := range map[string]string{main: "main-v2", a: "a-v2"} {
+		put(t, filepath.Join(w, settings), v)
+		os.Chtimes(filepath.Join(w, settings), later, later)
+	}
+	sync(0) // Keep Main
+	for _, w := range []string{a, b, c} {
+		if got := read(t, filepath.Join(w, settings)); got != "main-v2" {
+			t.Errorf("%s = %q, want main-v2", filepath.Base(w), got)
+		}
+	}
+	ss, err := Session(repo, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, lines := ss.InSync(); !ok {
+		t.Errorf("--check after sync: %q", lines)
 	}
 }

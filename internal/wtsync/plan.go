@@ -294,6 +294,15 @@ func planFile(main string, others []string, f FileState, same func(a, b string) 
 			st.Choice.RecheckSame = &[2]Loc{m, {wt, rel}}
 			steps = append(steps, st)
 		}
+		// Untouched and missing worktrees hold nothing new, so they take main's final version;
+		// otherwise the rebuilt manifest would hide that they are stale.
+		var ops []Op
+		for _, w := range append(slices.Clone(c.untouched), c.missing...) {
+			ops = append(ops, cp(main, w, rel))
+		}
+		if len(ops) > 0 {
+			steps = append(steps, autoStep(rel, ops))
+		}
 	default: // R5, git-wt-sync:553-611
 		if len(c.modifying) > 0 {
 			steps = fromModifying(main, all, rel, c.modifying, same, false)
