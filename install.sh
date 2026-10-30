@@ -21,7 +21,7 @@ REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || pwd)"
 IS_REMOTE=false
 
-if [[ ! -f "$SCRIPT_DIR/git-wt" ]]; then
+if [[ ! -f "$SCRIPT_DIR/go.mod" || ! -d "$SCRIPT_DIR/cmd/dx" ]]; then
     IS_REMOTE=true
     # Check for curl if remote
     if ! command -v curl &> /dev/null; then
@@ -52,83 +52,57 @@ fi
 # 1. Create the destination directories
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$WT_TOOLS_DIR"
-mkdir -p "$DX_SKILLS_TOOLS_DIR"
-mkdir -p "$DX_NB_TOOLS_DIR"
 
-# 2. Copy executable files
-echo "Installing routers and tools to $INSTALL_DIR..."
-fetch_file "git-wt" "$INSTALL_DIR/git-wt"
-fetch_file "dx" "$INSTALL_DIR/dx"
-
-
-echo "Installing worktree sub-commands to $WT_TOOLS_DIR..."
-fetch_file "git-wt-tools/git-wt-clone" "$WT_TOOLS_DIR/git-wt-clone"
-fetch_file "git-wt-tools/git-wt-add" "$WT_TOOLS_DIR/git-wt-add"
-fetch_file "git-wt-tools/git-wt-rm" "$WT_TOOLS_DIR/git-wt-rm"
-fetch_file "git-wt-tools/git-wt-clean" "$WT_TOOLS_DIR/git-wt-clean"
-fetch_file "git-wt-tools/git-wt-status" "$WT_TOOLS_DIR/git-wt-status"
-fetch_file "git-wt-tools/git-wt-sync" "$WT_TOOLS_DIR/git-wt-sync"
-fetch_file "git-wt-tools/devex-lib.sh" "$WT_TOOLS_DIR/devex-lib.sh"
-
-echo "Installing dx skills tools to $DX_SKILLS_TOOLS_DIR..."
-fetch_file "dx-skills-tools/dx-skills" "$DX_SKILLS_TOOLS_DIR/dx-skills"
-fetch_file "dx-skills-tools/dx-skills-lib.sh" "$DX_SKILLS_TOOLS_DIR/dx-skills-lib.sh"
-fetch_file "dx-skills-tools/dx-skills-list" "$DX_SKILLS_TOOLS_DIR/dx-skills-list"
-fetch_file "dx-skills-tools/dx-skills-sync" "$DX_SKILLS_TOOLS_DIR/dx-skills-sync"
-fetch_file "dx-skills-tools/dx-skills-diff" "$DX_SKILLS_TOOLS_DIR/dx-skills-diff"
-fetch_file "dx-skills-tools/dx-skills-edit" "$DX_SKILLS_TOOLS_DIR/dx-skills-edit"
-fetch_file "dx-skills-tools/dx-skills-rm" "$DX_SKILLS_TOOLS_DIR/dx-skills-rm"
-
-echo "Installing dx notebook tools to $DX_NB_TOOLS_DIR..."
-fetch_file "dx-nb-tools/dx-nb" "$DX_NB_TOOLS_DIR/dx-nb"
-fetch_file "dx-nb-tools/dx-nb-strip" "$DX_NB_TOOLS_DIR/dx-nb-strip"
-fetch_file "dx-nb-tools/dx-nb-diff" "$DX_NB_TOOLS_DIR/dx-nb-diff"
-fetch_file "dx-nb-tools/dx-nb-kernel" "$DX_NB_TOOLS_DIR/dx-nb-kernel"
-fetch_file "dx-nb-tools/dx-nb-list" "$DX_NB_TOOLS_DIR/dx-nb-list"
-
-# Ask if user wants to install dx-ctx
-INSTALL_DX_CTX=false
-echo -e "\n${YELLOW}Would you like to install the dx-ctx (Developer Context Manager) tools?${NC}"
-read -p "(y/n) " -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    INSTALL_DX_CTX=true
+# 2. Install the dx binary (build from a local clone with Go, else download a release)
+if [ "$IS_REMOTE" = false ] && command -v go &> /dev/null; then
+    echo "Building dx from source..."
+    TMP_BIN="$INSTALL_DIR/.dx.new.$$"
+    (cd "$SCRIPT_DIR" && go build -trimpath -o "$TMP_BIN" ./cmd/dx)
+    mv "$TMP_BIN" "$INSTALL_DIR/dx"
+else
+    if ! command -v curl &> /dev/null; then
+        echo -e "${RED}Error: 'curl' is required to download the dx release.${NC}"
+        exit 1
+    fi
+    case "$(uname -s | tr '[:upper:]' '[:lower:]')" in
+        darwin) OS=darwin ;;
+        linux) OS=linux ;;
+        *) echo -e "${RED}Error: unsupported OS: $(uname -s)${NC}"; exit 1 ;;
+    esac
+    case "$(uname -m)" in
+        x86_64|amd64) ARCH=amd64 ;;
+        arm64|aarch64) ARCH=arm64 ;;
+        *) echo -e "${RED}Error: unsupported architecture: $(uname -m)${NC}"; exit 1 ;;
+    esac
+    ASSET_URL="https://github.com/mukeshmk/devex-manager/releases/latest/download/dx_${OS}_${ARCH}.tar.gz"
+    echo "Downloading $ASSET_URL..."
+    TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "${TMP_DIR:?}"' EXIT
+    if ! curl -fsSL "$ASSET_URL" -o "$TMP_DIR/dx.tar.gz"; then
+        echo -e "${RED}Error: failed to download $ASSET_URL${NC}"
+        exit 1
+    fi
+    mkdir "$TMP_DIR/x"
+    tar -xzf "$TMP_DIR/dx.tar.gz" -C "$TMP_DIR/x"
+    if [ ! -f "$TMP_DIR/x/dx" ]; then
+        echo -e "${RED}Error: release archive does not contain 'dx'.${NC}"
+        exit 1
+    fi
+    install -m 0755 "$TMP_DIR/x/dx" "$INSTALL_DIR/.dx.new.$$"
+    mv "$INSTALL_DIR/.dx.new.$$" "$INSTALL_DIR/dx"
 fi
+chmod +x "$INSTALL_DIR/dx"
+ln -sf "$INSTALL_DIR/dx" "$INSTALL_DIR/git-wt"
 
-if [ "$INSTALL_DX_CTX" = true ]; then
-    mkdir -p "$CTX_TOOLS_DIR"
-    fetch_file "dx-ctx-tools/dx-ctx" "$CTX_TOOLS_DIR/dx-ctx"
-
-    echo "Installing context sub-commands to $CTX_TOOLS_DIR..."
-    fetch_file "dx-ctx-tools/dx-ctx-helper.sh" "$CTX_TOOLS_DIR/dx-ctx-helper.sh"
-    fetch_file "dx-ctx-tools/dx-ctx-show" "$CTX_TOOLS_DIR/dx-ctx-show"
-    fetch_file "dx-ctx-tools/dx-ctx-edit" "$CTX_TOOLS_DIR/dx-ctx-edit"
-    fetch_file "dx-ctx-tools/dx-ctx-add" "$CTX_TOOLS_DIR/dx-ctx-add"
-    fetch_file "dx-ctx-tools/dx-ctx-done" "$CTX_TOOLS_DIR/dx-ctx-done"
-    fetch_file "dx-ctx-tools/dx-ctx-undo" "$CTX_TOOLS_DIR/dx-ctx-undo"
-    fetch_file "dx-ctx-tools/dx-ctx-rm" "$CTX_TOOLS_DIR/dx-ctx-rm"
-    fetch_file "dx-ctx-tools/dx-ctx-clear" "$CTX_TOOLS_DIR/dx-ctx-clear"
-    fetch_file "dx-ctx-tools/dx-ctx-clean" "$CTX_TOOLS_DIR/dx-ctx-clean"
-    fetch_file "dx-ctx-tools/dx-ctx-todo" "$CTX_TOOLS_DIR/dx-ctx-todo"
-fi
+# 3. Remove old Bash scripts installed by earlier versions (only files we installed)
+for f in git-wt-clone git-wt-add git-wt-rm git-wt-clean git-wt-status git-wt-sync devex-lib.sh; do
+    rm -f "${WT_TOOLS_DIR:?}/$f"
+done
+rm -rf "${CTX_TOOLS_DIR:?}" "${DX_SKILLS_TOOLS_DIR:?}" "${DX_NB_TOOLS_DIR:?}"
 
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
 fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
-fetch_file "dx-completion.sh" "$WT_TOOLS_DIR/dx-completion.sh"
-
-# 3. Make the scripts executable
-chmod +x "$INSTALL_DIR/git-wt"
-chmod +x "$INSTALL_DIR/dx"
-chmod +x "$WT_TOOLS_DIR"/git-wt-*
-chmod +x "$WT_TOOLS_DIR/devex-lib.sh"
-chmod +x "$DX_SKILLS_TOOLS_DIR"/dx-*
-chmod +x "$DX_NB_TOOLS_DIR"/dx-*
-
-if [ "$INSTALL_DX_CTX" = true ]; then
-    chmod +x "$CTX_TOOLS_DIR"/dx-ctx-*
-    chmod +x "$CTX_TOOLS_DIR/dx-ctx"
-    chmod +x "$CTX_TOOLS_DIR/dx-ctx-helper.sh"
-fi
+"$INSTALL_DIR/dx" completion bash > "$WT_TOOLS_DIR/dx-completion.sh"
 
 # 4. Optional: Install Git Aliases
 echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g., 'git s' for status)?${NC}"
