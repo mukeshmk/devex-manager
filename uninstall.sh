@@ -32,11 +32,11 @@ fi
 # 1. Remove installed files
 echo -e "\n${YELLOW}Removing installed files...${NC}"
 
-if [ -f "$INSTALL_DIR/git-wt" ]; then
+if [ -e "$INSTALL_DIR/git-wt" ] || [ -L "$INSTALL_DIR/git-wt" ]; then
     rm "$INSTALL_DIR/git-wt"
-    echo "  ✓ Removed git-wt router"
+    echo "  ✓ Removed git-wt"
 else
-    echo "  - git-wt router not found"
+    echo "  - git-wt not found"
 fi
 
 
@@ -48,9 +48,9 @@ fi
 
 if [ -f "$INSTALL_DIR/dx" ]; then
     rm "$INSTALL_DIR/dx"
-    echo "  ✓ Removed dx router"
+    echo "  ✓ Removed dx binary"
 else
-    echo "  - dx router not found"
+    echo "  - dx binary not found"
 fi
 
 if [ -d "$WT_TOOLS_DIR" ]; then
