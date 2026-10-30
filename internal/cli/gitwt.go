@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const gitWtHelp = `DevEx Manager (git wt)
@@ -57,7 +58,17 @@ func NewGitWtRoot() *cobra.Command {
 		return errExit1
 	}
 	for _, c := range wtCmds {
+		resetFlags(c)
 		root.AddCommand(c)
 	}
 	return root
+}
+
+// resetFlags restores defaults: registered commands are package-level, so flag values set by
+// one Run would otherwise leak into the next (tests run many in one process).
+func resetFlags(c *cobra.Command) {
+	c.Flags().VisitAll(func(f *pflag.Flag) {
+		f.Value.Set(f.DefValue)
+		f.Changed = false
+	})
 }
