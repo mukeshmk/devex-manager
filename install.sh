@@ -11,9 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-CTX_TOOLS_DIR="$INSTALL_DIR/dx-ctx-tools"
-DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
-DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -94,12 +91,7 @@ fi
 chmod +x "$INSTALL_DIR/dx"
 ln -sf "$INSTALL_DIR/dx" "$INSTALL_DIR/git-wt"
 
-# 3. Remove old Bash scripts installed by earlier versions (only files we installed)
-for f in git-wt-clone git-wt-add git-wt-rm git-wt-clean git-wt-status git-wt-sync devex-lib.sh; do
-    rm -f "${WT_TOOLS_DIR:?}/$f"
-done
-rm -rf "${CTX_TOOLS_DIR:?}" "${DX_SKILLS_TOOLS_DIR:?}" "${DX_NB_TOOLS_DIR:?}"
-
+# 3. Shell completions
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
 fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
 if [[ "$SHELL" == */zsh ]]; then COMP_SHELL=zsh; else COMP_SHELL=bash; fi

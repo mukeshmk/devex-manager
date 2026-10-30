@@ -35,15 +35,14 @@ go test ./...
 ```
 
 ### What the installer does:
-1. Removes the old v1 Bash scripts and `*-tools/` directories (config, manifests, notes and backups are untouched).
-2. Installs `dx` and the `git-wt` symlink to `~/.local/bin/`.
-3. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases).
-4. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv).
-5. Generates shell completions (`dx completion zsh|bash`) and adds `~/.local/bin` to your `PATH` in a managed `# >>> DevEx Manager >>>` block in your `~/.zshrc` or `~/.bashrc`.
+1. Installs `dx` and the `git-wt` symlink to `~/.local/bin/`.
+2. **Optional:** Prompts to install a set of handy [Git aliases](#optional-git-aliases).
+3. **Optional:** Prompts to install [Python auto-venv tools](#python-auto-venv).
+4. Generates shell completions (`dx completion zsh|bash`) and adds `~/.local/bin` to your `PATH` in a managed `# >>> DevEx Manager >>>` block in your `~/.zshrc` or `~/.bashrc`.
 
 After installing, open a new terminal or run `source ~/.zshrc` (or your respective shell config).
 
-### Behaviour changes from v1 (Bash)
+### Behaviour notes
 
 - `git wt rm` of a target that is not found exits 1.
 - Errors go to stderr.

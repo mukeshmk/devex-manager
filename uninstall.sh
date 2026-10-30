@@ -11,9 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-CTX_TOOLS_DIR="$INSTALL_DIR/dx-ctx-tools"
-DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
-DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -39,13 +36,6 @@ else
     echo "  - git-wt not found"
 fi
 
-
-
-if [ -f "$INSTALL_DIR/git-ctx" ]; then
-    rm "$INSTALL_DIR/git-ctx"
-    echo "  ✓ Removed legacy git-ctx script"
-fi
-
 if [ -f "$INSTALL_DIR/dx" ]; then
     rm "$INSTALL_DIR/dx"
     echo "  ✓ Removed dx binary"
@@ -54,33 +44,10 @@ else
 fi
 
 if [ -d "$WT_TOOLS_DIR" ]; then
-    rm -rf "$WT_TOOLS_DIR"
+    rm -rf "${WT_TOOLS_DIR:?}"
     echo "  ✓ Removed git-wt-tools directory"
 else
     echo "  - git-wt-tools directory not found"
-fi
-
-
-
-if [ -d "$CTX_TOOLS_DIR" ]; then
-    rm -rf "$CTX_TOOLS_DIR"
-    echo "  ✓ Removed dx-ctx-tools directory"
-else
-    echo "  - dx-ctx-tools directory not found"
-fi
-
-if [ -d "$DX_SKILLS_TOOLS_DIR" ]; then
-    rm -rf "$DX_SKILLS_TOOLS_DIR"
-    echo "  ✓ Removed dx-skills-tools directory"
-else
-    echo "  - dx-skills-tools directory not found"
-fi
-
-if [ -d "$DX_NB_TOOLS_DIR" ]; then
-    rm -rf "$DX_NB_TOOLS_DIR"
-    echo "  ✓ Removed dx-nb-tools directory"
-else
-    echo "  - dx-nb-tools directory not found"
 fi
 
 # 2. Remove Git aliases

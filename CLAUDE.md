@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-DevEx Manager is a single Go binary (v2; the v1 Bash tools are gone) distributed via `install.sh` and GitHub Releases. It ships four tool families:
+DevEx Manager is a single Go binary distributed via `install.sh` and GitHub Releases. It ships four tool families:
 
 - `git wt` — a `git worktree` wrapper for bare-repo based multi-worktree workflows, with a full-screen app.
 - `dx nb` — Jupyter notebook hygiene utilities (strip outputs, kernel registration, diff, list).
