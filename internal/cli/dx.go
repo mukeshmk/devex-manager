@@ -39,6 +39,7 @@ func NewDxRoot() *cobra.Command {
 		if f := dxGroupRun[g.name]; f != nil {
 			grp.RunE = f
 		}
+		grp.DisableFlagParsing = g.name == "ctx" // ctx takes raw args: "dx ctx -x" adds a task
 		for _, c := range dxCmds[g.name] {
 			resetFlags(c)
 			grp.AddCommand(c)
