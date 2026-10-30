@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var cols = []Column{
+var testCols = []Column{
 	{Title: "Worktree", Min: 8},
 	{Title: "Branch", Min: 10, Flex: true},
 	{Title: "Status", Min: 6},
@@ -33,7 +33,7 @@ func TestTableFitsWidth(t *testing.T) {
 	branch := "feature/" + strings.Repeat("x", 52)
 	rows := [][]string{{"main", branch, "clean", "1", "2", "/tmp/a"}}
 	for _, w := range []int{60, 90, 160} {
-		out := Table(cols, rows, w)
+		out := Table(testCols, rows, w)
 		for _, l := range strings.Split(out, "\n") {
 			if lipgloss.Width(l) > w {
 				t.Fatalf("width %d: line %q too wide", w, l)
@@ -49,22 +49,45 @@ func TestTableFitsWidth(t *testing.T) {
 }
 
 func TestTableColouredCellsAlign(t *testing.T) {
-	red := lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+	// Literal ANSI + multi-byte cells: len() would mis-measure these.
+	red := func(s string) string { return "\x1b[31m" + s + "\x1b[0m" }
 	rows := [][]string{
-		{red.Render("main"), "a", red.Render("clean"), "1", "2", "/p"},
-		{"longer-name", red.Render("b"), "dirty", "10", "20", "/path"},
+		{red("main"), "a", red("● 4 files"), red("↑2 ↓3"), "2", "/p"},
+		{"longer-name", red("feature/" + strings.Repeat("é", 40)), "dirty…", "10", red("●"), "/path"},
 	}
-	lines := strings.Split(Table(cols, rows, 100), "\n")
-	w := lipgloss.Width(lines[0])
-	for _, l := range lines {
-		if lipgloss.Width(l) != w {
-			t.Fatalf("misaligned: %d vs %d in %q", lipgloss.Width(l), w, l)
+	for _, w := range []int{50, 100, 160} {
+		lines := strings.Split(Table(testCols, rows, w), "\n")
+		first := lipgloss.Width(lines[0])
+		if first > w {
+			t.Fatalf("width %d exceeded: %d", w, first)
+		}
+		for _, l := range lines {
+			if lipgloss.Width(l) != first {
+				t.Fatalf("w=%d misaligned: %d vs %d in %q", w, lipgloss.Width(l), first, l)
+			}
 		}
 	}
 }
 
+func TestWidthFallback(t *testing.T) {
+	t.Setenv("COLUMNS", "123")
+	if Width(nil) != 123 {
+		t.Fatal("COLUMNS")
+	}
+	t.Setenv("COLUMNS", "abc")
+	if Width(nil) != 100 {
+		t.Fatal("invalid COLUMNS -> 100")
+	}
+}
+
+func TestTableTinyWidthNoPanic(t *testing.T) {
+	for _, w := range []int{-5, 0, 1} {
+		_ = Table(testCols, [][]string{{"a\tb", "b", "c", "d", "e", "f"}}, w)
+	}
+}
+
 func TestTableNarrowNoPanic(t *testing.T) {
-	out := Table(cols, [][]string{{"main", "feature/long-branch", "clean", "1", "2", "/tmp/a"}}, 20)
+	out := Table(testCols, [][]string{{"main", "feature/long-branch", "clean", "1", "2", "/tmp/a"}}, 20)
 	if m := maxLineWidth(out); m > 20 {
 		t.Fatalf("width %d > 20:\n%s", m, out)
 	}

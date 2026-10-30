@@ -138,7 +138,11 @@ func (p huhPrompter) MultiSelect(q string, options []string, pre []bool) []bool 
 	var sel []int
 	opts := make([]huh.Option[int], len(options))
 	for i, o := range options {
-		opts[i] = huh.NewOption(o, i).Selected(i < len(pre) && pre[i])
+		on := i < len(pre) && pre[i]
+		opts[i] = huh.NewOption(o, i).Selected(on)
+		if on { // seed the value too, so submitting untouched keeps the preselection
+			sel = append(sel, i)
+		}
 	}
 	if p.run(huh.NewMultiSelect[int]().Title(q).Options(opts...).Value(&sel)) != nil {
 		return res
