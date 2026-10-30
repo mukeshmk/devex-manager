@@ -33,6 +33,11 @@ const (
 	tmpTag      = ".devex-tmp-" // copyFile's temp files: a crash can leave one behind
 )
 
+// NotSynced reports whether sync skips a file of this base name (conflict copies, crash leftovers).
+func NotSynced(name string) bool {
+	return strings.Contains(name, conflictTag) || (strings.HasPrefix(name, ".") && strings.Contains(name, tmpTag))
+}
+
 // ReadManifest parses `rel|mtime|size` lines; a missing file is an empty manifest.
 func ReadManifest(path string) (map[string]Stat, error) {
 	m := map[string]Stat{}
@@ -149,8 +154,7 @@ func walkWT(wt string, copyPaths []string) (map[string]Stat, error) {
 				}
 				return err
 			}
-			if !d.Type().IsRegular() || strings.Contains(d.Name(), conflictTag) ||
-				(strings.HasPrefix(d.Name(), ".") && strings.Contains(d.Name(), tmpTag)) {
+			if !d.Type().IsRegular() || NotSynced(d.Name()) {
 				return nil
 			}
 			info, err := d.Info()
