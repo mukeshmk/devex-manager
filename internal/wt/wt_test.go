@@ -3,8 +3,10 @@ package wt
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 	"github.com/mukeshmk/devex-manager/internal/testutil"
 )
@@ -50,7 +52,7 @@ func assess(t *testing.T, f *testutil.Fixture, branch string) Safety {
 	}
 	merged, _ := repo.MergedBranches("main")
 	heads, _ := repo.RemoteHeads("origin")
-	s, err := Assess(repo, *w, merged, map[string]map[string]bool{"origin": heads})
+	s, err := Assess(repo, config.RepoConfig{}, *w, merged, map[string]map[string]bool{"origin": heads})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,10 +143,67 @@ func TestFindTarget(t *testing.T) {
 	if w, b := FindTarget(wts, repo, "DEVX-1-thing"); w == nil || b != "DEVX-1-thing" {
 		t.Errorf("branch match: %v %q", w, b)
 	}
-	if w, b := FindTarget(wts, repo, "DEVX-9"); w != nil || b != "DEVX-9-orphan" {
-		t.Errorf("prefix fallback: %v %q", w, b)
+	if w, b := FindTarget(wts, repo, "DEVX-9"); w != nil || b != "DEVX-9" {
+		t.Errorf("no silent prefix match: %v %q", w, b)
+	}
+	if got := BranchesWithPrefix(repo, "DEVX-9"); len(got) != 1 || got[0] != "DEVX-9-orphan" {
+		t.Errorf("prefix suggestions: %q", got)
 	}
 	if w, b := FindTarget(wts, repo, "nope"); w != nil || b != "nope" {
 		t.Errorf("none: %v %q", w, b)
+	}
+}
+
+// C1: folder alpha holds branch beta, folder beta holds branch gamma. "beta" is the folder, not the branch.
+func TestFindTargetFolderBeatsBranch(t *testing.T) {
+	f := testutil.NewRepo(t)
+	alpha := f.AddWorktree(t, "alpha", "beta")
+	beta := f.AddWorktree(t, "beta", "gamma")
+	repo, _ := gitx.Open(filepath.Join(f.Root, "main"))
+	wts, _ := repo.Worktrees()
+	if w, b := FindTarget(wts, repo, "beta"); w == nil || w.Path != beta || b != "gamma" {
+		t.Errorf("folder beta: %+v %q", w, b)
+	}
+	if w, b := FindTarget(wts, repo, alpha); w == nil || w.Path != alpha || b != "beta" {
+		t.Errorf("abs path alpha: %+v %q", w, b)
+	}
+	if w, b := FindTarget(wts, repo, beta+"/"); w == nil || w.Path != beta || b != "gamma" {
+		t.Errorf("abs path beta/: %+v %q", w, b)
+	}
+	if w, b := FindTarget(wts, repo, "alpha"); w == nil || w.Path != alpha || b != "beta" {
+		t.Errorf("folder alpha: %+v %q", w, b)
+	}
+	if w, b := FindTarget(wts, repo, "gamma"); w == nil || w.Path != beta || b != "gamma" {
+		t.Errorf("branch gamma: %+v %q", w, b)
+	}
+}
+
+// I2: untracked copy/symlink paths are not work; tracked changes and other untracked files are.
+func TestAssessIgnoresUntrackedConfiguredPaths(t *testing.T) {
+	f := testutil.NewRepo(t)
+	wt := f.AddWorktree(t, "feat", "feat")
+	os.MkdirAll(filepath.Join(wt, ".claude", "sub"), 0o755)
+	os.WriteFile(filepath.Join(wt, ".claude", "sub", "a.json"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(wt, ".env"), []byte("x"), 0o644)
+	os.Symlink(f.Root, filepath.Join(wt, ".kiro"))
+	os.WriteFile(filepath.Join(wt, ".claudette"), []byte("x"), 0o644) // shares a prefix, not a path
+	os.WriteFile(filepath.Join(wt, ".cursor"), []byte("x"), 0o644)    // symlink path that is a real file: unique work
+	cfg := config.RepoConfig{SymlinkPaths: []string{".kiro", ".cursor"}, CopyPaths: []string{".claude/", ".env"}}
+	repo, _ := gitx.Open(wt)
+	s, err := Assess(repo, cfg, gitx.Worktree{Path: wt, Branch: "feat"}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.Uncommitted, []string{"?? .claudette", "?? .cursor"}) {
+		t.Fatalf("Uncommitted = %q", s.Uncommitted)
+	}
+	// a tracked file under a copy path that is modified still counts
+	os.Remove(filepath.Join(wt, ".claudette"))
+	os.Remove(filepath.Join(wt, ".cursor"))
+	run(t, wt, "add", "-f", ".env")
+	run(t, wt, "commit", "-q", "-m", "track env")
+	os.WriteFile(filepath.Join(wt, ".env"), []byte("changed"), 0o644)
+	if s, _ = Assess(repo, cfg, gitx.Worktree{Path: wt, Branch: "feat"}, nil, nil); len(s.Uncommitted) != 1 || s.Uncommitted[0] != " M .env" {
+		t.Fatalf("tracked change: %q", s.Uncommitted)
 	}
 }

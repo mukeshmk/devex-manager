@@ -11,27 +11,37 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 )
 
-// FindTarget matches git-wt-rm:62-91: folder suffix or exact branch, else a `target*` branch.
+// FindTarget picks the worktree target names, checking every worktree for each rule before the
+// next: exact path, then folder name, then branch. A branch-only target returns a nil worktree.
+// There is no prefix match: deleting a branch the user never named is worse than refusing.
 func FindTarget(wts []gitx.Worktree, repo *gitx.Repo, target string) (*gitx.Worktree, string) {
-	for i, w := range wts {
-		if w.Bare {
-			continue
-		}
-		if strings.HasSuffix(w.Path, "/"+target) || (w.Branch != "" && w.Branch == target) {
+	abs, _ := filepath.Abs(target)
+	rules := []func(gitx.Worktree) bool{
+		func(w gitx.Worktree) bool { return abs != "" && SamePath(abs, w.Path) },
+		func(w gitx.Worktree) bool { return filepath.Base(w.Path) == target },
+		func(w gitx.Worktree) bool { return w.Branch != "" && w.Branch == target },
+	}
+	for _, match := range rules {
+		for i, w := range wts {
+			if w.Bare || !match(w) {
+				continue
+			}
 			if w.Branch != "" {
 				return &wts[i], w.Branch
 			}
-			return &wts[i], target
+			return &wts[i], filepath.Base(w.Path) // detached: rm also deletes a same-named branch
 		}
 	}
-	if BranchExists(repo, target) {
-		return nil, target
-	}
-	if out, err := gitx.Run(repo.CommonDir, "branch", "--list", target+"*", "--format=%(refname:short)"); err == nil && out != "" {
-		first, _, _ := strings.Cut(out, "\n")
-		return nil, first
-	}
 	return nil, target
+}
+
+// BranchesWithPrefix lists local branches starting with prefix, for a "did you mean" hint.
+func BranchesWithPrefix(repo *gitx.Repo, prefix string) []string {
+	out, err := gitx.Run(repo.CommonDir, "branch", "--list", prefix+"*", "--format=%(refname:short)")
+	if err != nil || out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
 }
 
 // BranchExists reports whether refs/heads/<b> exists.

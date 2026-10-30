@@ -13,11 +13,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/ctx"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/ui"
 	"github.com/mukeshmk/devex-manager/internal/wt"
 	"github.com/mukeshmk/devex-manager/internal/wtsync"
 )
@@ -47,6 +47,7 @@ type (
 
 type confirm struct {
 	folder string
+	path   string // what rm is given: a folder name can also be some other worktree's branch
 	safety wt.Safety
 	refuse string // non-empty: git wt rm would refuse this outright, so the modal only offers close
 }
@@ -201,9 +202,9 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !m.confirm.canDelete() {
 				return m, nil
 			}
-			f := m.confirm.folder
+			p := m.confirm.path
 			m.confirm = nil
-			return m, m.run("rm", f)
+			return m, m.run("rm", p)
 		case "n", "esc":
 			m.confirm = nil
 		}
@@ -282,7 +283,7 @@ func (m *model) toggle() {
 func (m model) assess(r wt.Row) tea.Cmd {
 	repo, cfg := m.repo, m.cfg
 	return func() tea.Msg {
-		c := confirm{folder: r.Folder}
+		c := confirm{folder: r.Folder, path: r.WT.Path}
 		// Same refusals as git wt rm, so the modal never offers a delete rm would reject.
 		if wts, err := repo.Worktrees(); err == nil {
 			if main, _, err := wtsync.MainWorktree(repo, cfg, wts); err == nil && main != "" && wt.SamePath(main, r.WT.Path) {
@@ -303,7 +304,7 @@ func (m model) assess(r wt.Row) tea.Cmd {
 		if r.WT.Branch != "" {
 			heads = wt.RemoteHeads(repo, r.WT.Branch)
 		}
-		c.safety, err = wt.Assess(repo, r.WT, merged, heads)
+		c.safety, err = wt.Assess(repo, cfg, r.WT, merged, heads)
 		return assessedMsg{c, err}
 	}
 }
@@ -321,32 +322,12 @@ var (
 	bold   = lipgloss.NewStyle().Bold(true)
 )
 
-// fit truncates s to w cells with … and pads it to exactly w.
-func fit(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	s = ansi.Truncate(s, w, "…")
-	return s + strings.Repeat(" ", w-lipgloss.Width(s))
-}
-
-// box draws a rounded border of exactly w×h with title in the top edge.
-func box(title string, lines []string, w, h int, active bool) string {
-	in := w - 2
-	bc := dim
+// edge is the box border colour: accent marks the focused pane.
+func edge(active bool) lipgloss.Style {
 	if active {
-		bc = accent
+		return accent
 	}
-	title = ansi.Truncate(" "+title+" ", max(in-1, 0), "…")
-	out := []string{bc.Render("╭─") + bold.Render(title) + bc.Render(strings.Repeat("─", max(in-1-lipgloss.Width(title), 0))+"╮")}
-	for i := 0; i < h-2; i++ {
-		l := ""
-		if i < len(lines) {
-			l = lines[i]
-		}
-		out = append(out, bc.Render("│")+fit(l, in)+bc.Render("│"))
-	}
-	return strings.Join(append(out, bc.Render("╰"+strings.Repeat("─", in)+"╯")), "\n")
+	return dim
 }
 
 func remote(r wt.Row) string {
@@ -395,7 +376,7 @@ func (m model) View() string {
 		if r, ok := m.current(); ok {
 			title = r.Folder
 		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, box("Worktrees", left, lw, bodyH, !m.inTodos), box(title, right, rw, bodyH, m.inTodos))
+		body = lipgloss.JoinHorizontal(lipgloss.Top, ui.Box("Worktrees", left, lw, bodyH, edge(!m.inTodos)), ui.Box(title, right, rw, bodyH, edge(m.inTodos)))
 	}
 	return m.header() + "\n" + body + "\n" + m.footer()
 }
@@ -403,7 +384,7 @@ func (m model) View() string {
 func (m model) header() string {
 	l := bold.Render(" git wt · " + filepath.Base(m.repo.Root))
 	if !m.loaded {
-		return fit(l, m.w)
+		return ui.Fit(l, m.w)
 	}
 	var dirty, merged int
 	for _, r := range m.rows {
@@ -417,7 +398,7 @@ func (m model) header() string {
 	rt := fmt.Sprintf("%d worktrees · %d dirty · %d merged ", len(m.rows), dirty, merged)
 	gap := m.w - lipgloss.Width(l) - lipgloss.Width(rt)
 	if gap < 1 {
-		return fit(l, m.w)
+		return ui.Fit(l, m.w)
 	}
 	return l + strings.Repeat(" ", gap) + rt
 }
@@ -425,13 +406,13 @@ func (m model) header() string {
 func (m model) footer() string {
 	switch {
 	case m.filtering:
-		return fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
+		return ui.Fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
 	case m.status != "":
 		st := dim
 		if m.statusErr {
 			st = red
 		}
-		return fit(" "+st.Render(m.status), m.w)
+		return ui.Fit(" "+st.Render(m.status), m.w)
 	}
 	items := append([]string{}, helpItems...)
 	if m.filter != "" {
@@ -444,7 +425,7 @@ func (m model) footer() string {
 		}
 		items = slices.DeleteFunc(items, func(s string) bool { return s == drop })
 	}
-	return fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
+	return ui.Fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
 }
 
 func (m model) listLines(w, h int) []string {
@@ -471,7 +452,7 @@ func (m model) listLines(w, h int) []string {
 	var out []string
 	for i := start; i < len(rows) && i < start+h; i++ {
 		r := rows[i]
-		mark, name := "  ", fit(r.Folder, nameW)
+		mark, name := "  ", ui.Fit(r.Folder, nameW)
 		if i == m.sel {
 			mark, name = accent.Render("▸ "), bold.Render(name)
 		}
@@ -479,7 +460,7 @@ func (m model) listLines(w, h int) []string {
 		if r.Merged {
 			mg = yellow.Render("merged")
 		}
-		out = append(out, mark+name+" "+fit(changes(r), 7)+" "+fit(remote(r), 11)+" "+mg)
+		out = append(out, mark+name+" "+ui.Fit(changes(r), 7)+" "+ui.Fit(remote(r), 11)+" "+mg)
 	}
 	return out
 }
@@ -549,11 +530,14 @@ func (m model) modal() string {
 	switch {
 	case c.refuse != "":
 		tail = append(tail, red.Render(c.refuse))
-	case len(s.Uncommitted) == 0 && lost == 0:
+	case len(s.Uncommitted) == 0 && lost == 0 && s.GoneCommits() == 0:
 		tail = append(tail, green.Render("nothing would be lost"))
 	}
 	if lost > 0 {
 		tail = append(tail, red.Render(fmt.Sprintf("%d unpushed commit(s)", lost)))
+	}
+	if n := s.GoneCommits(); n > 0 {
+		tail = append(tail, yellow.Render(fmt.Sprintf("%d local commit(s) not on any remote (upstream gone)", n)))
 	}
 	if c.refuse == "" && !s.Safe() {
 		tail = append(tail, "", yellow.Render("run git wt rm -f "+c.folder+" in a shell to override"))
@@ -579,5 +563,5 @@ func (m model) modal() string {
 	for i := range lines {
 		lines[i] = " " + lines[i]
 	}
-	return box("Confirm delete", lines, min(m.w-4, 72), min(len(lines)+2, m.h-2), true)
+	return ui.Box("Confirm delete", lines, min(m.w-4, 72), min(len(lines)+2, m.h-2), accent)
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -64,6 +65,9 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 	}
 	w, branch := wt.FindTarget(wts, repo, target)
 	if w == nil && !wt.BranchExists(repo, branch) {
+		if similar := wt.BranchesWithPrefix(repo, target); len(similar) > 0 {
+			return fail(fmt.Sprintf("No worktree or branch named %q. Did you mean: %s?", target, strings.Join(similar, ", ")))
+		}
 		fmt.Fprintln(errw, ce.yellow.Render(fmt.Sprintf("Worktree for '%s' not found (it may have already been removed).", target)))
 		return fail(fmt.Sprintf("Local branch '%s' does not exist.", branch))
 	}
@@ -129,7 +133,7 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 // refuseUnsafe lists what would be lost when the worktree or branch is not Safe.
 func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree, branch string, fail func(...string) error) error {
 	merged, _ := repo.MergedBranches(cfg.BaseBranch) // unknown base: treat nothing as merged
-	s, err := wt.Assess(repo, subject, merged, wt.RemoteHeads(repo, branch))
+	s, err := wt.Assess(repo, cfg, subject, merged, wt.RemoteHeads(repo, branch))
 	if err != nil {
 		return fail(err.Error())
 	}

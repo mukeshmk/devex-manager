@@ -13,6 +13,7 @@ import (
 
 	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/skills"
+	"github.com/mukeshmk/devex-manager/internal/ui"
 )
 
 const (
@@ -257,30 +258,6 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// fit truncates s to w cells with … and pads it to exactly w.
-func fit(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	s = ansi.Truncate(s, w, "…")
-	return s + strings.Repeat(" ", w-lipgloss.Width(s))
-}
-
-// box draws a rounded border of exactly w×h with title in the top edge.
-func box(title string, lines []string, w, h int) string {
-	in := w - 2
-	title = ansi.Truncate(" "+title+" ", max(in-1, 0), "…")
-	out := []string{dim.Render("╭─") + bold.Render(title) + dim.Render(strings.Repeat("─", max(in-1-lipgloss.Width(title), 0))+"╮")}
-	for i := 0; i < h-2; i++ {
-		l := ""
-		if i < len(lines) {
-			l = lines[i]
-		}
-		out = append(out, dim.Render("│")+fit(l, in)+dim.Render("│"))
-	}
-	return strings.Join(append(out, dim.Render("╰"+strings.Repeat("─", in)+"╯")), "\n")
-}
-
 func (m model) View() string {
 	switch {
 	case m.w == 0:
@@ -290,13 +267,13 @@ func (m model) View() string {
 	}
 	bodyH := m.bodyH()
 	lw, labels := m.layout()
-	body := box("Skills", m.gridLines(lw-2, bodyH-2, labels), lw, bodyH)
+	body := ui.Box("Skills", m.gridLines(lw-2, bodyH-2, labels), lw, bodyH, dim)
 	if lw < m.w {
 		title := "Diff"
 		if s, ok := m.current(); ok {
 			title = s.Name
 		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, body, box(title, m.diffLines(bodyH-2), m.w-lw, bodyH))
+		body = lipgloss.JoinHorizontal(lipgloss.Top, body, ui.Box(title, m.diffLines(bodyH-2), m.w-lw, bodyH, dim))
 	}
 	out := append([]string{m.header(), body}, m.statusLines()...)
 	return strings.Join(append(out, m.footer()), "\n")
@@ -310,7 +287,7 @@ func (m model) statusLines() []string {
 	var out []string
 	for _, l := range strings.Split(m.status, "\n") {
 		for _, w := range strings.Split(ansi.Hardwrap(l, m.w-1, true), "\n") {
-			out = append(out, fit(" "+w, m.w))
+			out = append(out, ui.Fit(" "+w, m.w))
 		}
 	}
 	return out[:min(len(out), max(m.h-2-6, 0))]
@@ -377,7 +354,7 @@ func (m model) layout() (int, []string) {
 func (m model) header() string {
 	l := bold.Render(" dx skills · " + m.cfg.MasterDir)
 	if !m.loaded {
-		return fit(l, m.w)
+		return ui.Fit(l, m.w)
 	}
 	ticked := 0
 	for _, u := range m.ups {
@@ -387,14 +364,14 @@ func (m model) header() string {
 	}
 	rt := fmt.Sprintf(" %d skills · %d pending · %d ticked ", len(m.skills), len(m.ups), ticked)
 	if m.w-lipgloss.Width(rt) < 14 { // keep the counts visible; the master path gives way first
-		return fit(l, m.w)
+		return ui.Fit(l, m.w)
 	}
-	return fit(l, m.w-lipgloss.Width(rt)) + rt
+	return ui.Fit(l, m.w-lipgloss.Width(rt)) + rt
 }
 
 func (m model) footer() string {
 	if m.filtering {
-		return fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
+		return ui.Fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
 	}
 	items := append([]string{}, helpItems...)
 	if m.filter != "" {
@@ -407,7 +384,7 @@ func (m model) footer() string {
 		}
 		items = slices.DeleteFunc(items, func(s string) bool { return s == drop })
 	}
-	return fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
+	return ui.Fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
 }
 
 func (m model) gridLines(w, h int, labels []string) []string {
@@ -422,7 +399,7 @@ func (m model) gridLines(w, h int, labels []string) []string {
 		cols += lipgloss.Width(l) + 1
 	}
 	nameW := max(w-6-cols, 4)
-	hdr := "      " + fit("Skill", nameW)
+	hdr := "      " + ui.Fit("Skill", nameW)
 	for _, l := range labels {
 		hdr += " " + l
 	}
@@ -444,7 +421,7 @@ func (m model) gridLines(w, h int, labels []string) []string {
 				tick = "[ ] "
 			}
 		}
-		row := cur + tick + fit(s.Name, nameW)
+		row := cur + tick + ui.Fit(s.Name, nameW)
 		for j, l := range labels {
 			lw := lipgloss.Width(l)
 			mk := m.marks[s.Name][j]

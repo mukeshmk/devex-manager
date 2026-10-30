@@ -185,12 +185,70 @@ func TestRmBranchOnly(t *testing.T) {
 	if _, err := gitx.Run(s.main, "branch", "DEVX-7-orphan"); err != nil {
 		t.Fatal(err)
 	}
-	rc, out := s.rm(t, "DEVX-7")
-	if rc != 0 || !strings.Contains(out, "Worktree for 'DEVX-7' not found") || branchExists(t, s, "DEVX-7-orphan") {
+	rc, out := s.rm(t, "DEVX-7-orphan")
+	if rc != 0 || !strings.Contains(out, "Worktree for 'DEVX-7-orphan' not found") || branchExists(t, s, "DEVX-7-orphan") {
 		t.Fatalf("rc=%d out=%s", rc, out)
 	}
 	rc, out = s.rm(t, "nothing")
 	if rc == 0 || !strings.Contains(out, "Local branch 'nothing' does not exist.") {
 		t.Fatalf("none: rc=%d out=%s", rc, out)
+	}
+}
+
+// I1: a prefix is never silently widened to a branch the user did not name.
+func TestRmPrefixOnlyRefuses(t *testing.T) {
+	s := newSyncFix(t)
+	for _, b := range []string{"release-2026", "release-2027"} {
+		if _, err := gitx.Run(s.main, "branch", b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rc, out := s.rm(t, "rel")
+	if rc != 1 || !strings.Contains(out, `No worktree or branch named "rel". Did you mean: release-2026, release-2027?`) {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if !branchExists(t, s, "release-2026") || !branchExists(t, s, "release-2027") {
+		t.Fatal("prefix match deleted a branch")
+	}
+}
+
+// C1: folder alpha holds branch beta, folder beta holds branch gamma; rm beta removes folder beta only.
+func TestRmFolderBeatsBranch(t *testing.T) {
+	s := newSyncFix(t)
+	alpha := s.f.AddWorktree(t, "alpha", "beta")
+	beta := s.f.AddWorktree(t, "beta", "gamma")
+	rc, out := s.rm(t, "beta")
+	if rc != 0 || !strings.Contains(out, "Cleaning up worktree and branch for: gamma") {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if exists(beta) || branchExists(t, s, "gamma") {
+		t.Fatal("folder beta / branch gamma not removed")
+	}
+	if !exists(alpha) || !branchExists(t, s, "beta") {
+		t.Fatal("removed the wrong worktree")
+	}
+	// the app passes an absolute path
+	if rc, out = s.rm(t, alpha); rc != 0 || exists(alpha) || branchExists(t, s, "beta") {
+		t.Fatalf("abs path: rc=%d out=%s", rc, out)
+	}
+}
+
+// I2: untracked copy/symlink paths left by add + sync do not make a worktree unsafe.
+func TestRmIgnoresUntrackedConfiguredPaths(t *testing.T) {
+	s := newSyncFix(t)
+	write(t, filepath.Join(s.f.Root, ".devex.conf"), "[copies]\npaths = .vscode\n[symlinks]\npaths = .claude\n")
+	for _, w := range []string{s.main, s.feat, s.feat2} {
+		write(t, filepath.Join(w, ".vscode", "settings.json"), "{}")
+	}
+	os.Symlink(filepath.Join(s.main, ".claude"), filepath.Join(s.feat, ".claude"))
+	if rc, out := s.run(t); rc != 0 {
+		t.Fatalf("sync: rc=%d out=%s", rc, out)
+	}
+	if rc, out := s.rm(t, "feat"); rc != 0 || exists(s.feat) {
+		t.Fatalf("rm clean worktree: rc=%d out=%s", rc, out)
+	}
+	write(t, filepath.Join(s.feat2, "real.txt"), "x")
+	if rc, out := s.rm(t, "feat2"); rc == 0 || !strings.Contains(out, "?? real.txt") || strings.Contains(out, ".vscode") {
+		t.Fatalf("real untracked file: rc=%d out=%s", rc, out)
 	}
 }
