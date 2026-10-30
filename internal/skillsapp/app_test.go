@@ -262,3 +262,38 @@ func TestGridBackupPathWrapsAndTickCount(t *testing.T) {
 		t.Errorf("backup path %s not shown in full:\n%s", root, v)
 	}
 }
+
+func TestGridAbbreviatedHeadersUnique(t *testing.T) {
+	cfg := fixture(t)
+	root := filepath.Dir(cfg.MasterDir)
+	cfg.Tools = nil
+	names := []string{"kiro", "kilo", "claude", "claude-code", "gemini", "cursor", "windsurf", "antigravity", "copilot", "codex", "cline"}
+	for _, n := range names {
+		cfg.Tools = append(cfg.Tools, config.SkillTool{Name: n, Dir: filepath.Join(root, n)})
+	}
+	skill(t, cfg.MasterDir, "alpha", "a\n", t0)
+	skill(t, cfg.Tools[3].Dir, "alpha", "b\n", t0.Add(time.Hour))
+	v := start(t, cfg, 80, 24).View()
+	hdr := strings.Fields(strings.Trim(line(t, v, "Skill"), "│ "))[1:] // drop "Skill"
+	if len(hdr) != len(names)+1 {
+		t.Fatalf("headers %q:\n%s", hdr, v)
+	}
+	seen := map[string]bool{}
+	for _, h := range hdr {
+		if seen[h] {
+			t.Errorf("duplicate header %q in %q", h, hdr)
+		}
+		seen[h] = true
+	}
+	if !seen["claude"] || !seen["claude-"] || !seen["kir"] || !seen["kil"] {
+		t.Errorf("want shortest unique prefixes, got %q", hdr)
+	}
+	if got := marks(line(t, v, "alpha")); got != "≠···★·······" {
+		t.Errorf("marks %q:\n%s", got, v)
+	}
+	for _, l := range strings.Split(v, "\n") {
+		if w := lipgloss.Width(l); w > 80 {
+			t.Errorf("line width %d: %q", w, l)
+		}
+	}
+}
