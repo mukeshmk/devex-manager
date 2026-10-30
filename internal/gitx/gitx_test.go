@@ -47,17 +47,23 @@ func TestWorktreesParsesOddEntries(t *testing.T) {
 	for _, w := range wts {
 		by[w.Path] = w
 	}
-	if w := by[f.Root+"/.git"]; !w.Bare {
-		// bare entry path is the git dir's parent or the dir itself, depending on git
-		found := false
-		for _, w := range wts {
-			if w.Bare {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("no bare entry in %+v", wts)
-		}
+	if w, ok := by[f.Root]; !ok || !w.Bare || w.Branch != "" || w.Detached {
+		t.Errorf("bare = %+v ok=%v in %+v", w, ok, wts)
+	}
+	pr := f.AddWorktree(t, "gone", "gone-b")
+	if err := os.RemoveAll(pr); err != nil {
+		t.Fatal(err)
+	}
+	wts, err = r.Worktrees()
+	if err != nil {
+		t.Fatal(err)
+	}
+	by = map[string]Worktree{}
+	for _, w := range wts {
+		by[w.Path] = w
+	}
+	if w, ok := by[pr]; !ok || !w.Prunable {
+		t.Errorf("prunable = %+v ok=%v", w, ok)
 	}
 	if w := by[det]; !w.Detached || w.Branch != "" {
 		t.Errorf("detached = %+v", w)
@@ -92,7 +98,10 @@ func TestRemoteHeadsSingleCall(t *testing.T) {
 func TestHelpers(t *testing.T) {
 	f := testutil.NewRepo(t)
 	main := filepath.Join(f.Root, "main")
-	r, _ := Open(main)
+	r, err := Open(main)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if rem, ok := r.Upstream("main"); ok {
 		t.Errorf("unexpected upstream %q", rem)
 	}
@@ -117,5 +126,24 @@ func TestHelpers(t *testing.T) {
 	m, err := r.MergedBranches("main")
 	if err != nil || !m["main"] || m["b"] {
 		t.Errorf("merged = %v, %v", m, err)
+	}
+}
+
+func TestAheadBehindUsesBranchUpstream(t *testing.T) {
+	f := testutil.NewRepo(t)
+	main := filepath.Join(f.Root, "main")
+	wt := f.AddWorktree(t, "feat", "feat")
+	if _, err := Run(wt, "push", "-q", "origin", "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(wt, "branch", "--set-upstream-to=origin/feat", "feat"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(wt, "commit", "-q", "--allow-empty", "-m", "c"); err != nil {
+		t.Fatal(err)
+	}
+	a, b, has, err := AheadBehind(main, "feat") // dir has main checked out, not feat
+	if err != nil || a != 1 || b != 0 || !has {
+		t.Errorf("got %d %d %v %v", a, b, has, err)
 	}
 }
