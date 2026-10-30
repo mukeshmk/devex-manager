@@ -8,7 +8,39 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
+
+// Command describes one finished git process, as reported to the hook.
+type Command struct {
+	Dir      string
+	Args     []string
+	Err      error
+	Duration time.Duration
+}
+
+var (
+	hookMu sync.RWMutex
+	hook   func(Command)
+)
+
+// SetCommandHook registers fn to run after every git process exits, on the
+// goroutine that ran it. nil disables the hook.
+func SetCommandHook(fn func(Command)) {
+	hookMu.Lock()
+	hook = fn
+	hookMu.Unlock()
+}
+
+func notify(c Command) {
+	hookMu.RLock()
+	fn := hook
+	hookMu.RUnlock()
+	if fn != nil {
+		fn(c)
+	}
+}
 
 // Run executes git in dir and returns trimmed stdout; errors include stderr.
 func Run(dir string, args ...string) (string, error) {
@@ -16,7 +48,10 @@ func Run(dir string, args ...string) (string, error) {
 	cmd.Dir = dir
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
+	start := time.Now()
+	err := cmd.Run()
+	notify(Command{Dir: dir, Args: args, Err: err, Duration: time.Since(start)})
+	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(errb.String()))
 	}
 	return strings.TrimSpace(out.String()), nil
@@ -118,11 +153,14 @@ func AheadBehind(dir, branch string) (ahead, behind int, hasUpstream bool, err e
 // ChangedFiles returns `status --porcelain` lines.
 func ChangedFiles(dir string, extra ...string) ([]string, error) {
 	// Not Run(): its TrimSpace would eat the leading space of " M file".
-	cmd := exec.Command("git", append([]string{"status", "--porcelain"}, extra...)...)
+	args := append([]string{"status", "--porcelain"}, extra...)
+	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
+	start := time.Now()
 	b, err := cmd.Output()
+	notify(Command{Dir: dir, Args: args, Err: err, Duration: time.Since(start)})
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(errb.String()))
 	}
