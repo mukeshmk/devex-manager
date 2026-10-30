@@ -28,7 +28,10 @@ type FileState struct {
 	Others   map[string]Stat
 }
 
-const conflictTag = ".devex-conflict-"
+const (
+	conflictTag = ".devex-conflict-"
+	tmpTag      = ".devex-tmp-" // copyFile's temp files: a crash can leave one behind
+)
 
 // ReadManifest parses `rel|mtime|size` lines; a missing file is an empty manifest.
 func ReadManifest(path string) (map[string]Stat, error) {
@@ -146,7 +149,8 @@ func walkWT(wt string, copyPaths []string) (map[string]Stat, error) {
 				}
 				return err
 			}
-			if !d.Type().IsRegular() || strings.Contains(d.Name(), conflictTag) {
+			if !d.Type().IsRegular() || strings.Contains(d.Name(), conflictTag) ||
+				(strings.HasPrefix(d.Name(), ".") && strings.Contains(d.Name(), tmpTag)) {
 				return nil
 			}
 			info, err := d.Info()

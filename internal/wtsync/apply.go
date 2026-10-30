@@ -23,12 +23,19 @@ func SameFile(a, b string) bool {
 	return err1 == nil && err2 == nil && bytes.Equal(x, y)
 }
 
+// ErrAborted is returned by Resolve when the user cancels a prompt (Ctrl+C).
+var ErrAborted = errors.New("Sync aborted, nothing changed.")
+
 // Resolve walks the plan, asking each Choice with pr, and returns the ops to apply in order.
 // R4 conflicts are re-checked against the ops resolved so far: if earlier answers already made
 // main and the worktree identical, the align ops are taken without asking (git-wt-sync:531).
-func Resolve(p Plan, pr ui.Prompter) []Op {
-	return walk(p.Steps, func(s Step, done []Op) int {
+// If pr reports an abort, nothing more is asked and ErrAborted is returned with no ops.
+func Resolve(p Plan, pr ui.Prompter) ([]Op, error) {
+	ops := walk(p.Steps, func(s Step, done []Op) int {
 		c := s.Choice
+		if pr.Aborted() {
+			return c.Default // the result is thrown away; just stop asking
+		}
 		if c.RecheckSame != nil && sameAfter(done, c.RecheckSame[0], c.RecheckSame[1]) {
 			return 0
 		}
@@ -40,6 +47,10 @@ func Resolve(p Plan, pr ui.Prompter) []Op {
 		}
 		return pr.Choose(c.Question, c.Options, c.Default)
 	}, nil)
+	if pr.Aborted() {
+		return nil, ErrAborted
+	}
+	return ops, nil
 }
 
 // sameAfter reports whether a and b would have the same content once done is applied.
@@ -183,7 +194,7 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".devex-tmp-")
+	tmp, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+tmpTag)
 	if err != nil {
 		return err
 	}

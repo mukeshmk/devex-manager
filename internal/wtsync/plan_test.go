@@ -255,6 +255,7 @@ func TestPlanConflictMainAndWT(t *testing.T) {
 	}
 	w.want(M+"/"+settings, "main-conflict")
 	w.want(M+"/"+settings+".devex-conflict-feat", "feat-conflict")
+	w.want(F2+"/"+settings, "main-conflict") // M1: untouched feat2 is not left stale
 
 	// Keep feat version: main and feat2 get it.
 	w, files = conflictMainAndFeat(t)
@@ -266,16 +267,17 @@ func TestPlanConflictMainAndWT(t *testing.T) {
 	w, files = conflictMainAndFeat(t)
 	run(w, files, picks(t, 0))
 	w.want(F+"/"+settings, "main-conflict")
-	w.want(F2+"/"+settings, "base-settings")
+	w.want(F2+"/"+settings, "main-conflict")
 }
 
 func TestPlanBothModifiedIdenticallyAligns(t *testing.T) {
 	w := newWorld(t, map[string]string{M + "/" + settings: "same", F + "/" + settings: "same", F2 + "/" + settings: "old"})
 	p := run(w, []FileState{fstate(settings, s(100, 3), s(102, 4), map[string]Stat{F: s(103, 4), F2: s(100, 3)})}, picks(t))
 	want := []Op{{Kind: Copy, Src: Loc{M, settings}, Dst: Loc{F, settings}}}
-	if len(p.Steps) != 1 || p.Steps[0].Choice != nil || !reflect.DeepEqual(p.Steps[0].Ops, want) {
+	if len(p.Steps) != 2 || p.Steps[0].Choice != nil || !reflect.DeepEqual(p.Steps[0].Ops, want) {
 		t.Fatalf("steps %+v", p.Steps)
 	}
+	w.want(F2+"/"+settings, "same") // M1: untouched feat2 gets main's change too
 }
 
 func TestPlanConflictMultiWT(t *testing.T) {

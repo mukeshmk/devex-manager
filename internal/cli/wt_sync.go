@@ -130,7 +130,12 @@ func runSync(in *os.File, out, errw io.Writer, check, dryRun, yes bool) error {
 	}
 
 	backups := filepath.Join(s.CommonDir, "info", "devex", "sync-backups", time.Now().Format("2006-01-02-150405"))
-	used, err := wtsync.Apply(wtsync.Resolve(plan, pr), backups)
+	ops, err := wtsync.Resolve(plan, pr)
+	if err != nil {
+		fmt.Fprintln(errw, ce.yellow.Render(err.Error()))
+		return errExit1
+	}
+	used, err := wtsync.Apply(ops, backups)
 	reportBackups := func(w io.Writer) {
 		if used != "" {
 			fmt.Fprintln(w, "Backups stored in: "+used)
