@@ -174,7 +174,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = red.Render(fmt.Sprintf("%s (%d applied)", msg.err, msg.done))
 		}
 		if msg.root != "" {
-			m.status += " · Backups stored in: " + msg.root
+			m.status += "\nBackups stored in: " + msg.root // own line(s), wrapped not truncated, so it can be copied
 		}
 		m.loaded = false
 		return m, m.load()
@@ -221,7 +221,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown", "J":
 		m.scroll += page
 		if s, ok := m.current(); ok {
-			m.scroll = min(m.scroll, strings.Count(m.diffs[s.Name], "\n"))
+			m.scroll = min(m.scroll, max(len(diffSplit(m.diffs[s.Name]))-(m.bodyH()-2), 0))
 		}
 	case "pgup", "K":
 		m.scroll = max(m.scroll-page, 0)
@@ -288,31 +288,70 @@ func (m model) View() string {
 	case m.w < minW || m.h < minH:
 		return tooSmall
 	}
-	bodyH := m.h - 2
-	if m.status != "" {
-		bodyH--
+	bodyH := m.bodyH()
+	lw, labels := m.layout()
+	body := box("Skills", m.gridLines(lw-2, bodyH-2, labels), lw, bodyH)
+	if lw < m.w {
+		title := "Diff"
+		if s, ok := m.current(); ok {
+			title = s.Name
+		}
+		body = lipgloss.JoinHorizontal(lipgloss.Top, body, box(title, m.diffLines(bodyH-2), m.w-lw, bodyH))
 	}
-	nameW := 5
-	for _, s := range m.skills {
-		nameW = max(nameW, lipgloss.Width(s.Name))
-	}
-	need := 2 + 6 + min(nameW, 28) // border + "› [x] " + name
-	for _, l := range m.locs {
-		need += lipgloss.Width(l) + 1
-	}
-	lw := max(min(need, m.w*60/100), m.w*35/100)
-	rw := m.w - lw
-	title := "Diff"
-	if s, ok := m.current(); ok {
-		title = s.Name
-	}
-	body := lipgloss.JoinHorizontal(lipgloss.Top, box("Skills", m.gridLines(lw-2, bodyH-2), lw, bodyH),
-		box(title, m.diffLines(bodyH-2), rw, bodyH))
-	out := []string{m.header(), body}
-	if m.status != "" {
-		out = append(out, fit(" "+m.status, m.w))
-	}
+	out := append([]string{m.header(), body}, m.statusLines()...)
 	return strings.Join(append(out, m.footer()), "\n")
+}
+
+// statusLines wraps the status to the width (capped so the body keeps 6 rows).
+func (m model) statusLines() []string {
+	if m.status == "" {
+		return nil
+	}
+	var out []string
+	for _, l := range strings.Split(m.status, "\n") {
+		for _, w := range strings.Split(ansi.Hardwrap(l, m.w-1, true), "\n") {
+			out = append(out, fit(" "+w, m.w))
+		}
+	}
+	return out[:min(len(out), max(m.h-2-6, 0))]
+}
+
+func (m model) bodyH() int { return m.h - 2 - len(m.statusLines()) }
+
+// layout returns the grid width and its column labels. The grid sits beside the diff pane when
+// it fits in 60% of the width; otherwise it takes the full width (no diff pane) and the labels
+// are shortened until every location column fits.
+func (m model) layout() (int, []string) {
+	const fixed = 2 + 6 + 8 // border + "› [x] " + name floor
+	cols := func(ls []string) int {
+		n := 0
+		for _, l := range ls {
+			n += lipgloss.Width(l) + 1
+		}
+		return n
+	}
+	if fixed+cols(m.locs) <= m.w*60/100 {
+		nameW := 5
+		for _, s := range m.skills {
+			nameW = max(nameW, lipgloss.Width(s.Name))
+		}
+		return max(min(fixed-8+min(nameW, 28)+cols(m.locs), m.w*60/100), m.w*35/100), m.locs
+	}
+	longest := 0
+	for _, l := range m.locs {
+		longest = max(longest, lipgloss.Width(l))
+	}
+	// shortcut: labels truncated to k cells can collide (kiro/kilo → "ki"); fine for real tool names.
+	labels := make([]string, len(m.locs))
+	for k := longest; k >= 1; k-- {
+		for i, l := range m.locs {
+			labels[i] = ansi.Truncate(l, k, "")
+		}
+		if fixed+cols(labels) <= m.w {
+			break
+		}
+	}
+	return m.w, labels
 }
 
 func (m model) header() string {
@@ -320,12 +359,17 @@ func (m model) header() string {
 	if !m.loaded {
 		return fit(l, m.w)
 	}
-	rt := fmt.Sprintf("%d skills · %d pending ", len(m.skills), len(m.ups))
-	gap := m.w - lipgloss.Width(l) - lipgloss.Width(rt)
-	if gap < 1 {
+	ticked := 0
+	for _, u := range m.ups {
+		if !m.unticked[u.Skill] {
+			ticked++
+		}
+	}
+	rt := fmt.Sprintf(" %d skills · %d pending · %d ticked ", len(m.skills), len(m.ups), ticked)
+	if m.w-lipgloss.Width(rt) < 14 { // keep the counts visible; the master path gives way first
 		return fit(l, m.w)
 	}
-	return l + strings.Repeat(" ", gap) + rt
+	return fit(l, m.w-lipgloss.Width(rt)) + rt
 }
 
 func (m model) footer() string {
@@ -346,7 +390,7 @@ func (m model) footer() string {
 	return fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
 }
 
-func (m model) gridLines(w, h int) []string {
+func (m model) gridLines(w, h int, labels []string) []string {
 	if !m.loaded {
 		return []string{" Loading…"}
 	}
@@ -354,12 +398,12 @@ func (m model) gridLines(w, h int) []string {
 		return []string{red.Render(" " + m.err.Error())}
 	}
 	cols := 0
-	for _, l := range m.locs {
+	for _, l := range labels {
 		cols += lipgloss.Width(l) + 1
 	}
 	nameW := max(w-6-cols, 4)
 	hdr := "      " + fit("Skill", nameW)
-	for _, l := range m.locs {
+	for _, l := range labels {
 		hdr += " " + l
 	}
 	out := []string{bold.Render(hdr)}
@@ -381,7 +425,7 @@ func (m model) gridLines(w, h int) []string {
 			}
 		}
 		row := cur + tick + fit(s.Name, nameW)
-		for j, l := range m.locs {
+		for j, l := range labels {
 			lw := lipgloss.Width(l)
 			mk := m.marks[s.Name][j]
 			row += " " + strings.Repeat(" ", (lw-1)/2) + markStyle[mk].Render(string(mk)) + strings.Repeat(" ", lw-1-(lw-1)/2)
@@ -402,7 +446,7 @@ func (m model) diffLines(h int) []string {
 		d = m.diff(s)
 		m.diffs[s.Name] = d // map is shared across model copies: the cache survives View's value receiver
 	}
-	ls := strings.Split(strings.TrimRight(d, "\n"), "\n")
+	ls := diffSplit(d)
 	start := min(m.scroll, max(len(ls)-h, 0))
 	var out []string
 	for _, l := range ls[start:] {
@@ -438,3 +482,5 @@ func (m model) diff(s skills.Skill) string {
 	}
 	return "In sync across every copy."
 }
+
+func diffSplit(d string) []string { return strings.Split(strings.TrimRight(d, "\n"), "\n") }

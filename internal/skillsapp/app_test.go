@@ -203,3 +203,62 @@ func TestGridTooSmall(t *testing.T) {
 		t.Errorf("got %q", v)
 	}
 }
+
+func TestGridManyToolsNarrow(t *testing.T) {
+	cfg := fixture(t)
+	root := filepath.Dir(cfg.MasterDir)
+	cfg.Tools = nil
+	for _, n := range []string{"claude", "kiro", "gemini", "cursor", "windsurf", "copilot", "antigravity"} {
+		cfg.Tools = append(cfg.Tools, config.SkillTool{Name: n, Dir: filepath.Join(root, n)})
+	}
+	skill(t, cfg.MasterDir, "alpha", "a\n", t0)
+	skill(t, cfg.Tools[6].Dir, "alpha", "b\n", t0.Add(time.Hour))
+	m := start(t, cfg, 80, 24)
+	v := m.View()
+	if got := marks(line(t, v, "alpha")); got != "≠······★" {
+		t.Errorf("80 cols: every column must stay visible, got %q:\n%s", got, v)
+	}
+	for _, l := range strings.Split(v, "\n") {
+		if w := lipgloss.Width(l); w > 80 {
+			t.Errorf("line width %d: %q", w, l)
+		}
+	}
+	if strings.Contains(v, "(newest) vs") {
+		t.Errorf("diff pane should be dropped when the grid needs the width:\n%s", v)
+	}
+	v = send(m, tea.WindowSizeMsg{Width: 200, Height: 24}).View()
+	if got := marks(line(t, v, "alpha")); got != "≠······★" || !strings.Contains(v, "(newest) vs") {
+		t.Errorf("200 cols: grid and diff pane expected, marks %q:\n%s", got, v)
+	}
+}
+
+func TestGridBackupPathWrapsAndTickCount(t *testing.T) {
+	cfg := fixture(t)
+	skill(t, cfg.MasterDir, "alpha", "a1\n", t0)
+	skill(t, cfg.Tools[0].Dir, "alpha", "a2\n", t0.Add(time.Hour))
+	skill(t, cfg.MasterDir, "beta", "b1\n", t0)
+	skill(t, cfg.Tools[0].Dir, "beta", "b2\n", t0.Add(time.Hour))
+	m := start(t, cfg, 60, 20)
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "4 pending · 4 ticked") {
+		t.Errorf("tick count missing:\n%s", v)
+	}
+	m = send(m, key("space"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "4 pending · 2 ticked") {
+		t.Errorf("tick count after untick:\n%s", v)
+	}
+	v := send(m, key("a")).View()
+	ents, _ := os.ReadDir(filepath.Join(cfg.MasterDir, ".backups"))
+	if len(ents) != 1 {
+		t.Fatalf("backups: %v", ents)
+	}
+	var all strings.Builder
+	for _, l := range strings.Split(ansi.Strip(v), "\n") {
+		if lipgloss.Width(l) > 60 {
+			t.Errorf("line width %d: %q", lipgloss.Width(l), l)
+		}
+		all.WriteString(strings.TrimSpace(l))
+	}
+	if root := filepath.Join(cfg.MasterDir, ".backups", ents[0].Name()); !strings.Contains(all.String(), "Backups stored in: "+root) {
+		t.Errorf("backup path %s not shown in full:\n%s", root, v)
+	}
+}
