@@ -17,6 +17,9 @@ var errExit1 = errors.New("exit 1")
 
 var dxCmds = map[string][]*cobra.Command{}
 
+// dxGroupRun lets a group override its bare/unknown-subcommand behaviour (default: print help).
+var dxGroupRun = map[string]func(*cobra.Command, []string) error{}
+
 // registerDx lets later tasks attach subcommands to the skills, nb or ctx group.
 func registerDx(group string, cmd *cobra.Command) { dxCmds[group] = append(dxCmds[group], cmd) }
 
@@ -33,6 +36,9 @@ func NewDxRoot() *cobra.Command {
 	} {
 		grp := &cobra.Command{Use: g.name, Short: g.short, Args: cobra.ArbitraryArgs,
 			RunE: func(c *cobra.Command, _ []string) error { return c.Help() }}
+		if f := dxGroupRun[g.name]; f != nil {
+			grp.RunE = f
+		}
 		for _, c := range dxCmds[g.name] {
 			resetFlags(c)
 			grp.AddCommand(c)
@@ -54,6 +60,10 @@ func Run(argv0 string, args []string, in *os.File, out, errw io.Writer) int {
 	root.SetOut(out)
 	root.SetErr(errw)
 	if err := root.Execute(); err != nil {
+		var ec exitCode
+		if errors.As(err, &ec) {
+			return int(ec)
+		}
 		if err != errExit1 {
 			io.WriteString(errw, "Error: "+err.Error()+"\n")
 		}
