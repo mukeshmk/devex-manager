@@ -21,13 +21,20 @@ func init() {
 		Short:   "Rich status overview (alias: list)",
 		Args:    cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			return runStatus(c.OutOrStdout(), c.ErrOrStderr())
+			return runStatus(c, c.OutOrStdout(), c.ErrOrStderr())
 		},
 	}
 	registerWt(cmd)
 }
 
-func runStatus(out, errw io.Writer) error {
+// interactive is true only when both stdin and stdout are terminals: the app needs keys and a screen.
+func interactive(c *cobra.Command) bool {
+	in, _ := c.InOrStdin().(*os.File)
+	out, _ := c.OutOrStdout().(*os.File)
+	return ui.IsTTY(in) && ui.IsTTY(out)
+}
+
+func runStatus(c *cobra.Command, out, errw io.Writer) error {
 	fail := func(err error) error {
 		fmt.Fprintln(errw, colours(errw).red.Render(err.Error()))
 		return errExit1
@@ -44,7 +51,7 @@ func runStatus(out, errw io.Writer) error {
 	if err != nil {
 		return fail(err)
 	}
-	if f, ok := out.(*os.File); ok && ui.IsTTY(f) {
+	if interactive(c) {
 		self, err := os.Executable()
 		if err != nil {
 			return fail(err)

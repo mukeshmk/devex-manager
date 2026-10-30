@@ -53,7 +53,10 @@ func NewGitWtRoot() *cobra.Command {
 		}
 		c.Usage()
 	})
-	root.RunE = func(c *cobra.Command, _ []string) error {
+	root.RunE = func(c *cobra.Command, args []string) error {
+		if len(args) == 0 && interactive(c) { // bare `git wt` on a terminal opens the app
+			return runStatus(c, c.OutOrStdout(), c.ErrOrStderr())
+		}
 		fmt.Fprint(c.OutOrStdout(), gitWtHelp)
 		return errExit1
 	}
