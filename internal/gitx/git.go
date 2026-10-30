@@ -92,10 +92,13 @@ func (r *Repo) Upstream(branch string) (string, bool) {
 
 // AheadBehind compares branch to its upstream; hasUpstream is false if none.
 func AheadBehind(dir, branch string) (ahead, behind int, hasUpstream bool, err error) {
-	if _, e := Run(dir, "rev-parse", "--verify", "-q", branch+"@{upstream}"); e != nil {
-		return 0, 0, false, nil
+	if _, err = Run(dir, "rev-parse", "--verify", "-q", "refs/heads/"+branch); err != nil {
+		return 0, 0, false, err
 	}
-	out, err := Run(dir, "rev-list", "--left-right", "--count", branch+"...@{upstream}")
+	if _, e := Run(dir, "config", "--get", "branch."+branch+".merge"); e != nil {
+		return 0, 0, false, nil // key unset: no upstream configured
+	}
+	out, err := Run(dir, "rev-list", "--left-right", "--count", branch+"..."+branch+"@{upstream}")
 	if err != nil {
 		return 0, 0, true, err
 	}
@@ -103,8 +106,12 @@ func AheadBehind(dir, branch string) (ahead, behind int, hasUpstream bool, err e
 	if len(f) != 2 {
 		return 0, 0, true, fmt.Errorf("unexpected rev-list output %q", out)
 	}
-	ahead, _ = strconv.Atoi(f[0])
-	behind, _ = strconv.Atoi(f[1])
+	if ahead, err = strconv.Atoi(f[0]); err != nil {
+		return 0, 0, true, err
+	}
+	if behind, err = strconv.Atoi(f[1]); err != nil {
+		return 0, 0, true, err
+	}
 	return ahead, behind, true, nil
 }
 
@@ -113,9 +120,11 @@ func ChangedFiles(dir string) ([]string, error) {
 	// Not Run(): its TrimSpace would eat the leading space of " M file".
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = dir
+	var errb bytes.Buffer
+	cmd.Stderr = &errb
 	b, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("git status: %w", err)
+		return nil, fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(errb.String()))
 	}
 	var files []string
 	for _, l := range strings.Split(string(b), "\n") {

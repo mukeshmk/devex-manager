@@ -5,13 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // Fixture is a `git wt clone`-style layout: Root/.git (bare) + Root/main.
 type Fixture struct {
 	Tmp, Origin, Root string
-	env               []string
 }
 
 var isolated = []string{
@@ -36,12 +36,8 @@ func git(t *testing.T, dir string, args ...string) {
 func NewRepo(t *testing.T) *Fixture {
 	t.Helper()
 	for _, kv := range isolated {
-		for i := 0; i < len(kv); i++ {
-			if kv[i] == '=' {
-				t.Setenv(kv[:i], kv[i+1:])
-				break
-			}
-		}
+		k, v, _ := strings.Cut(kv, "=")
+		t.Setenv(k, v)
 	}
 	tmp, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
