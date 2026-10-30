@@ -20,6 +20,7 @@ func newSkillsFix(t *testing.T, extra map[string]string) *skillsFix {
 		"DX_CLAUDE_SKILLS_DIR": filepath.Join(home, "claude"),
 		"DX_KIRO_SKILLS_DIR":   filepath.Join(home, "kiro"),
 		"DX_TOOLS":             "gemini,claude,kiro",
+		"EDITOR":               "true", // never launch a real editor
 	}
 	for k, v := range extra {
 		env[k] = v
@@ -222,6 +223,27 @@ func TestSkillsEditCreatesAndSyncs(t *testing.T) {
 		b, err := os.ReadFile(filepath.Join(f.home, loc, "new-skill/SKILL.md"))
 		if err != nil || !strings.Contains(string(b), "Edited Content") {
 			t.Errorf("%s: %q %v", loc, b, err)
+		}
+	}
+}
+
+func TestSkillsRejectsBadNames(t *testing.T) {
+	f := newSkillsFix(t, nil)
+	f.skill(t, "master", "a", "m", skT0)
+	f.skill(t, "claude", "a", "c", skT0)
+	for _, args := range [][]string{{"rm", ""}, {"rm", ".."}, {"rm", "."}, {"rm", "a/b"}, {"edit", ""}, {"edit", "../x"}, {"diff", ""}} {
+		if rc, out, e := f.run(t, "y\ny\n", args...); rc != 1 {
+			t.Errorf("%q rc=%d\n%s%s", args, rc, out, e)
+		}
+	}
+	for _, loc := range []string{"master", "claude"} {
+		if _, err := os.Stat(filepath.Join(f.home, loc, "a/skill.md")); err != nil {
+			t.Errorf("%s damaged: %v", loc, err)
+		}
+	}
+	for _, p := range []string{"master/.backups", "x", "master/a/b"} {
+		if _, err := os.Stat(filepath.Join(f.home, p)); err == nil {
+			t.Errorf("%s created", p)
 		}
 	}
 }

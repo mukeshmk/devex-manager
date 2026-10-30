@@ -3,6 +3,7 @@ package skills
 
 import (
 	"bufio"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -39,8 +40,21 @@ func roots(cfg config.SkillsConfig) []Copy {
 	return r
 }
 
+// ValidName rejects names that are not a single path element: "", ".", ".." or anything with a
+// separator would make <root>/<name> the root itself or a path outside it.
+func ValidName(name string) error {
+	if name == "" || name == "." || name == ".." || name != filepath.Base(name) {
+		return fmt.Errorf("Error: Invalid skill name '%s'.", name)
+	}
+	return nil
+}
+
 // Locations returns every existing <root>/<name> dir, master first (dx-skills-diff:15-32).
+// An invalid name has no locations.
 func Locations(cfg config.SkillsConfig, name string) []Copy {
+	if ValidName(name) != nil {
+		return nil
+	}
 	var out []Copy
 	for _, r := range roots(cfg) {
 		d := filepath.Join(r.Dir, name)
