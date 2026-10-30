@@ -1,10 +1,16 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/mukeshmk/devex-manager/internal/gitwt/flows"
+	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
 
 const gitWtHelp = `DevEx Manager (git wt)
@@ -84,4 +90,22 @@ func resetFlags(c *cobra.Command) {
 		}
 		f.Changed = false
 	})
+}
+
+// wtEnv builds the flow environment from the process cwd; a getwd failure is printed like any flow error.
+func wtEnv(in *os.File, out, errw io.Writer) (flows.Env, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(errw, colours(errw).red.Render(err.Error()))
+		return flows.Env{}, errExit1
+	}
+	return flows.Env{Cwd: cwd, Out: out, Err: errw, TTY: ui.IsTTY(in)}, nil
+}
+
+// exit1 maps a flow's already-reported failure to the CLI's exit status 1.
+func exit1(err error) error {
+	if errors.Is(err, flows.ErrReported) {
+		return errExit1
+	}
+	return err
 }
