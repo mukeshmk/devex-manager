@@ -318,9 +318,27 @@ func (m model) statusLines() []string {
 
 func (m model) bodyH() int { return m.h - 2 - len(m.statusLines()) }
 
+// uniquePrefixes shortens each label to the smallest prefix no other label starts with; a label
+// that is a prefix of another (claude, claude-code) stays whole.
+func uniquePrefixes(ls []string) []string {
+	out := make([]string, len(ls))
+	for i, l := range ls {
+		r := []rune(l)
+		out[i] = l
+		for k := 1; k < len(r); k++ {
+			p := string(r[:k])
+			if !slices.ContainsFunc(ls, func(o string) bool { return o != l && strings.HasPrefix(o, p) }) {
+				out[i] = p
+				break
+			}
+		}
+	}
+	return out
+}
+
 // layout returns the grid width and its column labels. The grid sits beside the diff pane when
 // it fits in 60% of the width; otherwise it takes the full width (no diff pane) and the labels
-// are shortened until every location column fits.
+// are shortened (unique prefixes first) until every location column fits.
 func (m model) layout() (int, []string) {
 	const fixed = 2 + 6 + 8 // border + "› [x] " + name floor
 	cols := func(ls []string) int {
@@ -337,13 +355,15 @@ func (m model) layout() (int, []string) {
 		}
 		return max(min(fixed-8+min(nameW, 28)+cols(m.locs), m.w*60/100), m.w*35/100), m.locs
 	}
+	if labels := uniquePrefixes(m.locs); fixed+cols(labels) <= m.w {
+		return m.w, labels
+	}
 	longest := 0
 	for _, l := range m.locs {
 		longest = max(longest, lipgloss.Width(l))
 	}
-	// shortcut: labels truncated to k cells can collide (kiro/kilo → "ki"); fine for real tool names.
 	labels := make([]string, len(m.locs))
-	for k := longest; k >= 1; k-- {
+	for k := longest; k >= 1; k-- { // last resort: uniform truncation, may collide
 		for i, l := range m.locs {
 			labels[i] = ansi.Truncate(l, k, "")
 		}
