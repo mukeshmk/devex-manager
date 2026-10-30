@@ -73,8 +73,12 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 			return fail("Error: You are currently inside the worktree you are trying to delete!",
 				"Please 'cd' into a different folder (like your bare repo or main worktree) and try again.")
 		}
-		// No active worktrees means there is no main to protect, so the error is ignored.
-		if main, _, _ := wtsync.MainWorktree(repo, cfg, wts); main != "" && wt.SamePath(main, w.Path) {
+		// Without a known main worktree the guard cannot run, so refuse instead of skipping it.
+		main, _, err := wtsync.MainWorktree(repo, cfg, wts)
+		if err != nil {
+			return fail(err.Error())
+		}
+		if wt.SamePath(main, w.Path) {
 			return fail(fmt.Sprintf("Error: Refusing to remove the main worktree '%s'.", filepath.Base(main)))
 		}
 	}
@@ -99,6 +103,12 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 		}
 		if err := refuseUnsafe(repo, cfg, subject, branch, fail); err != nil {
 			return err
+		}
+		// A detached worktree's HEAD says nothing about the same-named branch Remove also deletes.
+		if w != nil && w.Branch == "" && wt.BranchExists(repo, branch) {
+			if err := refuseUnsafe(repo, cfg, gitx.Worktree{Branch: branch}, branch, fail); err != nil {
+				return err
+			}
 		}
 	}
 

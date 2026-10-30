@@ -46,8 +46,11 @@ func Assess(repo *gitx.Repo, wt gitx.Worktree, merged map[string]bool, remoteHea
 		s.Merged = merged[wt.Branch]
 		var remote string
 		remote, s.HasUpstream = repo.Upstream(wt.Branch)
+		// Gone means the upstream's own remote branch (branch.<b>.merge) is missing; a "." remote is local.
+		merge, mErr := gitx.Run(repo.CommonDir, "config", "--get", "branch."+wt.Branch+".merge")
 		heads, fetched := remoteHeads[remote]
-		s.UpstreamGone = s.HasUpstream && fetched && !heads[wt.Branch]
+		s.UpstreamGone = s.HasUpstream && remote != "." && mErr == nil && merge != "" && fetched &&
+			!heads[strings.TrimPrefix(merge, "refs/heads/")]
 	}
 	return s, nil
 }

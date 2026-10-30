@@ -62,30 +62,46 @@ func TestSafeMatrix(t *testing.T) {
 		name  string
 		setup func(t *testing.T, f *testutil.Fixture, wt string)
 		safe  bool
+		gone  bool // want UpstreamGone
 	}{
 		{"dirty tree", func(t *testing.T, f *testutil.Fixture, wt string) {
 			os.WriteFile(filepath.Join(wt, "new.txt"), []byte("x"), 0o644)
-		}, false},
+		}, false, false},
 		{"never pushed, 1 commit", func(t *testing.T, f *testutil.Fixture, wt string) {
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
-		}, false},
-		{"never pushed, 0 commits", func(t *testing.T, f *testutil.Fixture, wt string) {}, true},
+		}, false, false},
+		{"never pushed, 0 commits", func(t *testing.T, f *testutil.Fixture, wt string) {}, true, false},
 		{"upstream gone", func(t *testing.T, f *testutil.Fixture, wt string) {
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
 			run(t, wt, "push", "-q", "-u", "origin", "feat")
 			run(t, f.Origin, "branch", "-D", "feat")
 			run(t, wt, "update-ref", "-d", "refs/remotes/origin/feat")
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "squashed-elsewhere")
-		}, true},
+		}, true, true},
+		{"upstream is origin/main, 1 local commit", func(t *testing.T, f *testutil.Fixture, wt string) {
+			run(t, wt, "branch", "-q", "--set-upstream-to=origin/main")
+			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
+		}, false, false},
+		{"upstream is local main, 1 local commit", func(t *testing.T, f *testutil.Fixture, wt string) {
+			run(t, wt, "branch", "-q", "--set-upstream-to=main")
+			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
+		}, false, false},
+		{"pushed as other, other gone", func(t *testing.T, f *testutil.Fixture, wt string) {
+			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
+			run(t, wt, "push", "-q", "-u", "origin", "feat:other")
+			run(t, f.Origin, "branch", "-D", "other")
+			run(t, wt, "update-ref", "-d", "refs/remotes/origin/other")
+			run(t, wt, "commit", "-q", "--allow-empty", "-m", "squashed-elsewhere")
+		}, true, true},
 		{"merged", func(t *testing.T, f *testutil.Fixture, wt string) {
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
 			run(t, filepath.Join(f.Root, "main"), "merge", "-q", "--ff-only", "feat")
-		}, true},
+		}, true, false},
 		{"upstream exists, ahead 1", func(t *testing.T, f *testutil.Fixture, wt string) {
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c1")
 			run(t, wt, "push", "-q", "-u", "origin", "feat")
 			run(t, wt, "commit", "-q", "--allow-empty", "-m", "c2")
-		}, false},
+		}, false, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -93,8 +109,8 @@ func TestSafeMatrix(t *testing.T) {
 			wt := f.AddWorktree(t, "feat", "feat")
 			c.setup(t, f, wt)
 			s := assess(t, f, "feat")
-			if s.Safe() != c.safe {
-				t.Errorf("Safe() = %v, want %v (%+v)", s.Safe(), c.safe, s)
+			if s.Safe() != c.safe || s.UpstreamGone != c.gone {
+				t.Errorf("Safe() = %v, want %v; UpstreamGone want %v (%+v)", s.Safe(), c.safe, c.gone, s)
 			}
 		})
 	}

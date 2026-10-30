@@ -106,6 +106,9 @@ func TestRmRefusesDirty(t *testing.T) {
 	if rc == 0 || !strings.Contains(out, "1 commit(s) not on any remote") {
 		t.Fatalf("unpushed: rc=%d out=%s", rc, out)
 	}
+	if !exists(s.feat2) || !branchExists(t, s, "feat2") {
+		t.Fatal("refusal changed something")
+	}
 	if rc, out = s.rm(t, "--force", "feat"); rc != 0 || exists(s.feat) {
 		t.Fatalf("force: rc=%d out=%s", rc, out)
 	}
@@ -132,8 +135,48 @@ func TestRmRefusesInside(t *testing.T) {
 	s := newSyncFix(t)
 	s.main = s.feat // run from inside the target
 	rc, out := s.rm(t, "-f", "feat")
-	if rc == 0 || !strings.Contains(out, "You are currently inside the worktree you are trying to delete!") || !exists(s.feat) {
+	if rc == 0 || !strings.Contains(out, "You are currently inside the worktree you are trying to delete!") {
 		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if !exists(s.feat) || !branchExists(t, s, "feat") {
+		t.Fatal("refusal changed something")
+	}
+}
+
+// A detached worktree in folder feat plus a branch feat: rm deletes both, so both must be safe.
+func TestRmDetachedGuardsSameNamedBranch(t *testing.T) {
+	s := newSyncFix(t)
+	for _, args := range [][]string{{"commit", "-q", "--allow-empty", "-m", "local-only"}, {"checkout", "-q", "--detach", "HEAD~1"}} {
+		if _, err := gitx.Run(s.feat, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rc, out := s.rm(t, "feat")
+	if rc == 0 || !strings.Contains(out, "1 commit(s) not on any remote") {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if !exists(s.feat) || !branchExists(t, s, "feat") {
+		t.Fatal("refusal changed something")
+	}
+	if rc, out = s.rm(t, "--force", "feat"); rc != 0 || exists(s.feat) || branchExists(t, s, "feat") {
+		t.Fatalf("force: rc=%d out=%s", rc, out)
+	}
+}
+
+// If the main worktree cannot be identified, rm must refuse rather than skip the main guard.
+func TestRmRefusesWhenMainUnknown(t *testing.T) {
+	s := newSyncFix(t)
+	for _, d := range []string{s.main, s.feat, s.feat2} {
+		os.RemoveAll(d) // every worktree prunable: MainWorktree errors
+	}
+	fromRoot := *s
+	fromRoot.main = s.f.Root
+	rc, out := fromRoot.rm(t, "--force", "feat")
+	if rc == 0 || !strings.Contains(out, "No active worktrees found") {
+		t.Fatalf("rc=%d out=%s", rc, out)
+	}
+	if !branchExists(t, &fromRoot, "feat") {
+		t.Fatal("refusal changed something")
 	}
 }
 
