@@ -2,7 +2,9 @@
 package wtapp
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,7 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/ctx"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 	"github.com/mukeshmk/devex-manager/internal/wt"
+	"github.com/mukeshmk/devex-manager/internal/wtsync"
 )
 
 const (
@@ -33,9 +36,8 @@ type (
 		err  error
 	}
 	assessedMsg struct {
-		folder string
-		safety wt.Safety
-		err    error
+		confirm
+		err error
 	}
 	execDoneMsg struct {
 		args []string
@@ -46,6 +48,7 @@ type (
 type confirm struct {
 	folder string
 	safety wt.Safety
+	refuse string // non-empty: git wt rm would refuse this outright, so the modal only offers close
 }
 
 type model struct {
@@ -63,13 +66,28 @@ type model struct {
 	filtering, inTodos bool
 	confirm            *confirm
 	status             string
+	statusErr          bool
 }
 
 // New builds the app; self is the path of the running binary, re-invoked as git-wt for actions.
 func New(repo *gitx.Repo, cfg config.RepoConfig, self string) tea.Model {
 	return model{repo: repo, cfg: cfg, self: self, exec: func(c *exec.Cmd) tea.Cmd {
-		return tea.ExecProcess(c, func(err error) tea.Msg { return execDoneMsg{c.Args, err} })
+		return tea.Exec(&paused{Cmd: c}, func(err error) tea.Msg { return execDoneMsg{c.Args, err} })
 	}}
+}
+
+// paused runs the child, then waits for Enter so its output is read before the alt screen returns.
+type paused struct{ *exec.Cmd }
+
+func (p *paused) SetStdin(r io.Reader)  { p.Stdin = r }
+func (p *paused) SetStdout(w io.Writer) { p.Stdout = w }
+func (p *paused) SetStderr(w io.Writer) { p.Stderr = w }
+
+func (p *paused) Run() error {
+	err := p.Cmd.Run()
+	fmt.Fprint(p.Stdout, "\nPress Enter to return to git wt…")
+	bufio.NewReader(p.Stdin).ReadString('\n')
+	return err
 }
 
 // Run shows m full-screen until the user quits.
@@ -154,13 +172,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.clamp()
 	case assessedMsg:
 		if msg.err != nil {
-			m.status = "Error: " + msg.err.Error()
+			m.status, m.statusErr = "Error: "+msg.err.Error(), true
 		} else {
-			m.confirm = &confirm{msg.folder, msg.safety}
+			m.confirm = &msg.confirm
 		}
 	case execDoneMsg:
 		// The child's output vanishes with the alt screen, so say how it ended.
-		m.status = strings.Join(msg.args, " ") + ": done"
+		m.status, m.statusErr = strings.Join(msg.args, " ")+": done", msg.err != nil
 		if msg.err != nil {
 			m.status = fmt.Sprintf("%s: %v", strings.Join(msg.args, " "), msg.err)
 		}
@@ -180,6 +198,9 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.confirm != nil {
 		switch k {
 		case "y":
+			if !m.confirm.canDelete() {
+				return m, nil
+			}
 			f := m.confirm.folder
 			m.confirm = nil
 			return m, m.run("rm", f)
@@ -254,14 +275,27 @@ func (m *model) toggle() {
 		err = ctx.Write(path, out)
 	}
 	if err != nil {
-		m.status = err.Error()
+		m.status, m.statusErr = err.Error(), true
 	}
 }
 
 func (m model) assess(r wt.Row) tea.Cmd {
-	repo, base := m.repo, m.cfg.BaseBranch
+	repo, cfg := m.repo, m.cfg
 	return func() tea.Msg {
-		merged, err := repo.MergedBranches(base)
+		c := confirm{folder: r.Folder}
+		// Same refusals as git wt rm, so the modal never offers a delete rm would reject.
+		if wts, err := repo.Worktrees(); err == nil {
+			if main, _, err := wtsync.MainWorktree(repo, cfg, wts); err == nil && main != "" && wt.SamePath(main, r.WT.Path) {
+				c.refuse = fmt.Sprintf("Refusing to remove the main worktree '%s'.", r.Folder)
+			}
+		}
+		if c.refuse == "" && r.WT.Branch != "" && r.WT.Branch == cfg.BaseBranch {
+			c.refuse = fmt.Sprintf("Refusing to delete the base branch '%s'.", r.WT.Branch)
+		}
+		if c.refuse != "" {
+			return assessedMsg{c, nil}
+		}
+		merged, err := repo.MergedBranches(cfg.BaseBranch)
 		if err != nil {
 			merged = map[string]bool{}
 		}
@@ -269,8 +303,8 @@ func (m model) assess(r wt.Row) tea.Cmd {
 		if r.WT.Branch != "" {
 			heads = wt.RemoteHeads(repo, r.WT.Branch)
 		}
-		s, err := wt.Assess(repo, r.WT, merged, heads)
-		return assessedMsg{r.Folder, s, err}
+		c.safety, err = wt.Assess(repo, r.WT, merged, heads)
+		return assessedMsg{c, err}
 	}
 }
 
@@ -393,7 +427,11 @@ func (m model) footer() string {
 	case m.filtering:
 		return fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
 	case m.status != "":
-		return fit(" "+red.Render(m.status), m.w)
+		st := dim
+		if m.statusErr {
+			st = red
+		}
+		return fit(" "+st.Render(m.status), m.w)
 	}
 	items := append([]string{}, helpItems...)
 	if m.filter != "" {
@@ -501,21 +539,31 @@ func (m model) detailLines(w, h int) []string {
 	return out
 }
 
+func (c confirm) canDelete() bool { return c.refuse == "" && c.safety.Safe() }
+
 func (m model) modal() string {
-	s := m.confirm.safety
+	c := m.confirm
+	s := c.safety
 	lost := s.LostCommits()
 	var tail []string
-	if len(s.Uncommitted) == 0 && lost == 0 {
+	switch {
+	case c.refuse != "":
+		tail = append(tail, red.Render(c.refuse))
+	case len(s.Uncommitted) == 0 && lost == 0:
 		tail = append(tail, green.Render("nothing would be lost"))
 	}
 	if lost > 0 {
 		tail = append(tail, red.Render(fmt.Sprintf("%d unpushed commit(s)", lost)))
 	}
-	if !s.Safe() {
-		tail = append(tail, "", yellow.Render("git wt rm refuses unsafe deletes; use git wt rm -f in a shell"))
+	if c.refuse == "" && !s.Safe() {
+		tail = append(tail, "", yellow.Render("run git wt rm -f "+c.folder+" in a shell to override"))
 	}
-	tail = append(tail, "", "y confirm · n cancel")
-	lines := []string{bold.Render("Delete worktree " + m.confirm.folder + " and its branch?"), ""}
+	if c.canDelete() {
+		tail = append(tail, "", "y confirm · n cancel")
+	} else {
+		tail = append(tail, "", "n/esc close")
+	}
+	lines := []string{bold.Render("Delete worktree " + c.folder + " and its branch?"), ""}
 	if n := len(s.Uncommitted); n > 0 {
 		// Cap the list so the prompt always stays on screen.
 		shown := min(n, maxLost, max(m.h-4-len(lines)-len(tail)-2, 0))

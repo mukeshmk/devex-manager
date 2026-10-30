@@ -149,12 +149,26 @@ func TestAppFilter(t *testing.T) {
 func TestAppDeleteShowsConfirm(t *testing.T) {
 	var got [][]string
 	f, m := start(t, &got)
-	os.WriteFile(filepath.Join(f.Root, "DEVX-2", "dirty.txt"), []byte("x"), 0o644)
+	dirty := filepath.Join(f.Root, "DEVX-2", "dirty.txt")
+	os.WriteFile(dirty, []byte("x"), 0o644)
 	m = press(m, "r", "/", "DEVX-2", "enter", "d")
-	if v := m.View(); !strings.Contains(v, "dirty.txt") {
-		t.Errorf("confirm missing file:\n%s", v)
+	v := m.View()
+	for _, w := range []string{"dirty.txt", "run git wt rm -f DEVX-2 in a shell to override", "n/esc close"} {
+		if !strings.Contains(v, w) {
+			t.Errorf("unsafe modal missing %q:\n%s", w, v)
+		}
 	}
-	checkWidth(t, m.View(), 100, 30)
+	checkWidth(t, v, 100, 30)
+	m = press(m, "y") // unsafe: y does nothing, modal stays
+	if len(got) != 0 || !strings.Contains(m.View(), "n/esc close") {
+		t.Errorf("y on unsafe: execs %v\n%s", got, m.View())
+	}
+	m = press(m, "esc")
+	os.Remove(dirty)
+	m = press(m, "r", "d")
+	if !strings.Contains(m.View(), "nothing would be lost") {
+		t.Errorf("view:\n%s", m.View())
+	}
 	m = press(m, "n")
 	if len(got) != 0 || strings.Contains(m.View(), "n cancel") {
 		t.Errorf("cancel: execs %v\n%s", got, m.View())
@@ -169,12 +183,16 @@ func TestAppDeleteShowsConfirm(t *testing.T) {
 	}
 }
 
-func TestAppDeleteCleanSaysNothingLost(t *testing.T) {
+func TestAppDeleteMainRefused(t *testing.T) {
 	var got [][]string
 	_, m := start(t, &got)
-	m = press(m, "/", "DEVX-2", "enter", "d")
-	if !strings.Contains(m.View(), "nothing would be lost") {
-		t.Errorf("view:\n%s", m.View())
+	m = press(m, "/", "main", "enter", "d")
+	if v := m.View(); !strings.Contains(v, "Refusing to remove the main worktree 'main'.") || !strings.Contains(v, "n/esc close") {
+		t.Errorf("view:\n%s", v)
+	}
+	press(m, "y")
+	if len(got) != 0 {
+		t.Errorf("y on main ran %v", got)
 	}
 }
 
@@ -184,5 +202,19 @@ func TestAppSyncCleanExec(t *testing.T) {
 	m = press(m, "s", "c", "enter")
 	if len(got) != 2 || !slices.Equal(got[0], []string{"git-wt", "sync"}) || !slices.Equal(got[1], []string{"git-wt", "clean"}) {
 		t.Errorf("execs %v", got)
+	}
+}
+
+func TestPausedKeepsOutput(t *testing.T) {
+	var out strings.Builder
+	p := &paused{Cmd: exec.Command("sh", "-c", "echo refused; exit 3")}
+	p.SetStdin(strings.NewReader("\n"))
+	p.SetStdout(&out)
+	p.SetStderr(&out)
+	if err := p.Run(); err == nil {
+		t.Error("child exit status lost")
+	}
+	if !strings.Contains(out.String(), "refused\n\nPress Enter to return to git wt…") {
+		t.Errorf("out %q", out.String())
 	}
 }

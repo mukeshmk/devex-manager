@@ -49,3 +49,16 @@ func TestMainUnknownPrintsHelp(t *testing.T) {
 		}
 	}
 }
+
+// Bare `git wt` opens the app only on a terminal; non-TTY keeps help and exit 1.
+func TestBareGitWtNonTTYPrintsHelp(t *testing.T) {
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	defer in.Close()
+	var out, errw bytes.Buffer
+	if rc := Run("git-wt", nil, in, &out, &errw); rc != 1 {
+		t.Fatalf("rc=%d", rc)
+	}
+	if !strings.Contains(out.String(), "Usage: git wt <command> [arguments]") || strings.Contains(out.String(), "\x1b[?1049h") {
+		t.Errorf("out %q", out.String())
+	}
+}
