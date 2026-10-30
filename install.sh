@@ -102,11 +102,12 @@ rm -rf "${CTX_TOOLS_DIR:?}" "${DX_SKILLS_TOOLS_DIR:?}" "${DX_NB_TOOLS_DIR:?}"
 
 echo "Installing completion scripts to $WT_TOOLS_DIR..."
 fetch_file "git-wt-completion.sh" "$WT_TOOLS_DIR/git-wt-completion.sh"
-"$INSTALL_DIR/dx" completion bash > "$WT_TOOLS_DIR/dx-completion.sh"
+if [[ "$SHELL" == */zsh ]]; then COMP_SHELL=zsh; else COMP_SHELL=bash; fi
+"$INSTALL_DIR/dx" completion "$COMP_SHELL" > "$WT_TOOLS_DIR/dx-completion.sh"
 
 # 4. Optional: Install Git Aliases
 echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g., 'git s' for status)?${NC}"
-read -p "(y/n) " -n 1 -r
+read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing Git aliases..."
@@ -121,7 +122,7 @@ fi
 
 # 5. Optional: Install Python Auto-Venv Tools
 echo -e "\n${YELLOW}Would you like to install the Python auto-venv tools (auto-activates .venv when you cd into a directory)?${NC}"
-read -p "(y/n) " -n 1 -r
+read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing auto-venv script..."
