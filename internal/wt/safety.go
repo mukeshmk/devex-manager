@@ -3,6 +3,7 @@ package wt
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/mukeshmk/devex-manager/internal/config"
 	"github.com/mukeshmk/devex-manager/internal/gitx"
+	"github.com/mukeshmk/devex-manager/internal/wtsync"
 )
 
 // Safety is what deleting a worktree and its branch would lose.
@@ -72,6 +74,9 @@ func configuredUntracked(line, wtPath string, cfg config.RepoConfig) bool {
 		rel = u
 	}
 	rel = strings.TrimSuffix(rel, "/")
+	if wtsync.NotSynced(path.Base(rel)) { // sync never copies these, so rm's sync check can't see them
+		return false
+	}
 	clean := func(p string) string { return strings.Trim(filepath.ToSlash(filepath.Clean(p)), "/") }
 	for _, p := range cfg.CopyPaths {
 		if p = clean(p); p != "" && p != "." && (rel == p || strings.HasPrefix(rel, p+"/")) {
