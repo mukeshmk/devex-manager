@@ -308,7 +308,7 @@ func init() {
 		registerDx("ctx", c)
 	}
 	// Bare "dx ctx" shows; any other first word is taken as a task to add.
-	dxDefaults["ctx"] = func(c *cobra.Command, args []string) error {
+	dxGroupRun["ctx"] = func(c *cobra.Command, args []string) error {
 		switch {
 		case len(args) == 0 || args[0] == "": // Bash: ${1:-show}
 			e, err := ctxSetup(c)
