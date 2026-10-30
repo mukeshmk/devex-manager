@@ -11,6 +11,7 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/gitx"
 	"github.com/mukeshmk/devex-manager/internal/ui"
 	"github.com/mukeshmk/devex-manager/internal/wt"
+	"github.com/mukeshmk/devex-manager/internal/wtapp"
 )
 
 func init() {
@@ -43,14 +44,20 @@ func runStatus(out, errw io.Writer) error {
 	if err != nil {
 		return fail(err)
 	}
+	if f, ok := out.(*os.File); ok && ui.IsTTY(f) {
+		self, err := os.Executable()
+		if err != nil {
+			return fail(err)
+		}
+		if err := wtapp.Run(wtapp.New(repo, cfg, self)); err != nil {
+			return fail(err)
+		}
+		return nil
+	}
 	rows, err := wt.Collect(repo, cfg)
 	if err != nil {
 		return fail(err)
 	}
-	width := 100
-	if f, ok := out.(*os.File); ok && ui.IsTTY(f) {
-		width = ui.Width(f) // Task 12 swaps in the full-screen app here
-	}
-	fmt.Fprint(out, wt.RenderTable(rows, width))
+	fmt.Fprint(out, wt.RenderTable(rows, 100))
 	return nil
 }
