@@ -2,10 +2,12 @@ package wtapp
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
@@ -103,24 +105,29 @@ func (p popup) update(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
 func (p popup) view(maxW, maxH int) string {
 	var lines []string
 	hint := ""
+	// Questions go in the body, wrapped, so a long one is never cut off in the box title.
+	question := strings.Split(ansi.Wrap(p.title, max(maxW-6, 1), ""), "\n")
 	switch p.kind {
 	case popupConfirm:
-		lines, hint = []string{p.title}, "enter/y yes · esc/n no"
+		lines, hint = question, "enter/y yes · esc/n no"
 	case popupInput:
 		lines, hint = []string{p.input.View()}, "enter accept · esc cancel"
 	case popupHelp:
 		lines = p.options
 	case popupChoose:
-		hint = "↑/↓ move · enter select · esc default"
+		lines, hint = question[:min(len(question), max(maxH-7, 1))], "↑/↓ move · enter select · esc default"
 	case popupChecklist:
 		hint = "space tick · a all · enter apply · esc none"
 	}
 	box := p.title
-	if p.kind == popupConfirm {
+	switch p.kind {
+	case popupConfirm:
 		box = "Confirm"
+	case popupChoose:
+		box = "Choose"
 	}
 	if p.kind == popupChoose || p.kind == popupChecklist {
-		vis := max(min(len(p.options), maxH-4-1), 1) // one row is the hint
+		vis := max(min(len(p.options), maxH-4-1-len(lines)), 1) // one row is the hint
 		off := max(p.cursor-vis+1, 0)
 		for i := off; i < min(off+vis, len(p.options)); i++ {
 			mark, row := "  ", p.options[i]

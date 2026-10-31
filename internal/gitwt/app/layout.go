@@ -77,31 +77,36 @@ func (m model) View() string {
 	}
 	bodyH := m.h - 1
 	var body string
-	switch {
-	case m.confirm != nil:
+	if m.confirm != nil && m.popup == nil {
 		body = lipgloss.Place(m.w, bodyH, lipgloss.Center, lipgloss.Center, m.modal())
-	case m.popup != nil:
-		body = lipgloss.Place(m.w, bodyH, lipgloss.Center, lipgloss.Center, m.popup.view(m.w, bodyH))
-	default:
+	} else {
 		body = m.panels()
 	}
 	return body + "\n" + m.footer()
 }
 
+// panels draws every panel; a popup replaces the main view, or when stacked and too tall for it, everything above the log.
 func (m model) panels() string {
-	left, mr, lr, _ := layout(m.w, m.h)
+	left, mr, lr, stacked := layout(m.w, m.h)
 	var ps []placed
+	if m.popup != nil && stacked && lipgloss.Height(m.popup.view(mr.w, m.h)) > mr.h {
+		left, mr = nil, rect{0, 0, m.w, lr.y}
+	}
 	for i, r := range left {
 		p := panel(i + 1)
 		ps = append(ps, placed{r, m.box(p, m.panelLines(p, r.w-2, r.h-2), r)})
 	}
-	title, lines := m.mainView()
-	// Scroll offsets only apply while focused; enter resets scroll, and the log falls back to its tail.
-	if m.focusMain {
-		lines = lines[min(m.scroll, max(len(lines)-(mr.h-2), 0)):]
-		title += focusMark
+	if m.popup != nil {
+		ps = append(ps, placed{mr, lipgloss.Place(mr.w, mr.h, lipgloss.Center, lipgloss.Center, m.popup.view(mr.w, mr.h))})
+	} else {
+		title, lines := m.mainView()
+		// Scroll offsets only apply while focused; enter resets scroll, and the log falls back to its tail.
+		if m.focusMain {
+			lines = lines[min(m.scroll, max(len(lines)-(mr.h-2), 0)):]
+			title += focusMark
+		}
+		ps = append(ps, placed{mr, ui.Box(title, lines, mr.w, mr.h, edge(m.focusMain))})
 	}
-	ps = append(ps, placed{mr, ui.Box(title, lines, mr.w, mr.h, edge(m.focusMain))})
 	ps = append(ps, placed{lr, m.box(panelLog, m.logLines(lr.h-2), lr)})
 	return compose(m.h-1, ps)
 }

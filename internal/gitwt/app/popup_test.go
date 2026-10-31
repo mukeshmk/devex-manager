@@ -114,3 +114,12 @@ func TestPopupViewFits(t *testing.T) {
 		}
 	}
 }
+
+// A long choose question is wrapped into the body, so its end stays visible at 60 columns.
+func TestPopupChooseQuestionInBody(t *testing.T) {
+	q := "Conflict in .vscode/some/deeply/nested/settings.json. Modified in feat and main. Which version to keep?"
+	v := (popup{kind: popupChoose, title: q, options: []string{"main", "feat"}}).view(60, 20)
+	if !strings.Contains(v, "Which version to keep?") || !strings.Contains(v, "Conflict in") {
+		t.Errorf("question cut:\n%s", v)
+	}
+}
