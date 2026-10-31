@@ -230,3 +230,24 @@ func TestPopupFilterBackspaceKeepsOption(t *testing.T) {
 		t.Fatalf("index=%d", a.Index)
 	}
 }
+
+func TestPopupFilterPasteDropsControls(t *testing.T) {
+	p := filterPopup("+ new branch…", "abc")
+	p, _, _, _ = p.update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc\r\n"), Paste: true})
+	if p.filter != "abc" {
+		t.Fatalf("filter=%q", p.filter)
+	}
+	v := p.view(60, 12)
+	if !strings.Contains(v, "esc clear/cancel") {
+		t.Errorf("hint:\n%s", v)
+	}
+	lines := strings.Split(v, "\n")
+	if len(lines) > 12 {
+		t.Errorf("%d lines", len(lines))
+	}
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > 60 {
+			t.Errorf("width %d", w)
+		}
+	}
+}

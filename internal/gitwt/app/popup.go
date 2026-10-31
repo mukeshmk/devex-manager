@@ -3,6 +3,7 @@ package wtapp
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -81,7 +82,7 @@ func (p popup) updateFilter(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd)
 			p.filter = string(r[:len(r)-1])
 		}
 	case (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) && !msg.Alt:
-		p.filter, typed = p.filter+string(msg.Runes), true
+		p.filter, typed = p.filter+printable(msg.Runes), true
 	default:
 		edited = false
 	}
@@ -179,7 +180,7 @@ func (p popup) view(maxW, maxH int) string {
 	case popupChoose:
 		lines, hint = question[:min(len(question), max(maxH-7, 1))], "↑/↓ move · enter select · esc default"
 		if p.filterable {
-			hint = "↑/↓ move · enter select · esc clear/default"
+			hint = "↑/↓ move · enter select · esc clear/cancel"
 		}
 	case popupChecklist:
 		hint = "space tick · a all · enter apply · esc none"
@@ -233,4 +234,14 @@ func (p popup) view(maxW, maxH int) string {
 	}
 	w := min(maxW-4, max(40, longest+4))
 	return ui.Box(box, lines, w, len(lines)+2, accent)
+}
+
+// printable drops control runes: a bracketed paste keeps \r and \n, which would break the box.
+func printable(rs []rune) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, string(rs))
 }
