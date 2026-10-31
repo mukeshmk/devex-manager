@@ -149,7 +149,7 @@ On a terminal, two commands open a full-screen app. Piped or scripted, they prin
 │                        ││                                                    │
 │                        ││                                                    │
 ╰────────────────────────╯╰────────────────────────────────────────────────────╯
- / filter · 1-5 panels · ↑↓ move · s sync · c clean · d delete · q quit · ? keys
+ / filter · 1-5 panels · ↑↓ move · s sync · c clean · d delete · n new · ? keys
 ```
 
 Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktrees|Context) above the main view and a 3-row command log. The minimum size is 60x12.
@@ -165,6 +165,8 @@ Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktr
 | `s` | Sync copy paths |
 | `c` | Clean stale worktrees (merged, or upstream gone) |
 | `d` | Delete the selected worktree |
+| `n` | New worktree: pick a remote branch (type to filter) or `+ new branch…` |
+| `f` | Fetch all remotes (`git fetch --all --prune`) |
 | `?` | Key help |
 | `q`/`ctrl+c` | Quit |
 
@@ -184,6 +186,8 @@ Context panel (that branch's `dx ctx` todos):
 | `C` | Clear done todos |
 
 Sync, clean and delete run inside the app: questions and confirmations appear as popups over the main view (the panels and command log stay visible, so the plan an action prints is on screen while you answer), and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. `ctrl+c` in a flow question cancels the whole action (for sync, before anything changes). `esc` depends on the question: a choose question takes its default, a confirm means no, a checklist ticks nothing, and an input cancels.
+
+`n` lists origin branches that have no worktree yet; picking one runs the same code as `git wt add <branch>`, and `+ new branch…` asks for a name and creates it from the base branch (with `naming_strategy = custom`, a second popup asks for the folder name). The new worktree is selected when it is ready. `f` fetches so new remote branches show up in `n`. Git never asks for a password or passphrase inside the app: if fetch needs one, it fails with git's message in the status line.
 
 The command log lists every git command the tool runs plus each action's output. It keeps the last 500 lines and scrolls when focused (`5`).
 
@@ -205,6 +209,9 @@ The command log lists every git command the tool runs plus each action's output.
 Add custom commands to `~/Library/Application Support/lazygit/config.yml` on macOS (or `~/.config/lazygit/config.yml` on Linux) to open the apps from lazygit. The keys below are examples (free in lazygit 0.66.2's defaults); press `?` in lazygit to check for conflicts with built-in keys in your version.
 
 ```yaml
+# Return to lazygit straight away when git wt / dx skills quit (no "Press enter to return")
+promptToReturnFromSubprocess: false
+
 customCommands:
   - key: 'X'
     context: 'global'
@@ -219,9 +226,23 @@ customCommands:
   - key: 'Y'
     context: 'global'
     command: 'git wt sync'
-    output: terminal
+    output: popup
     description: 'git wt sync'
+  # Branches panel, Remotes tab: make a worktree for the selected remote branch
+  - key: 'X'
+    context: 'remoteBranches'
+    command: 'git wt add {{.SelectedRemoteBranch.Name}}'
+    output: popup
+    description: 'git wt add (worktree for this remote branch)'
+  # Branches panel, Local tab: make a worktree for the selected local branch
+  - key: 'X'
+    context: 'localBranches'
+    command: 'git wt add {{.SelectedLocalBranch.Name}}'
+    output: popup
+    description: 'git wt add (worktree for this branch)'
 ```
+
+`promptToReturnFromSubprocess: false` skips lazygit's "Press enter to return" after the app quits. Because of it, output from an `output: terminal` command would vanish as soon as the command exits, so sync and add use `output: popup` to keep their output readable. With `output: popup`, `git wt sync` runs without a TTY, so it takes each question's default without asking (Resolve Later for conflicts).
 
 ## dx nb — Jupyter Notebook Utilities
 

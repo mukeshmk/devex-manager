@@ -66,6 +66,9 @@ func (p popup) updateFilter(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd)
 		p.cursor, edited = p.cursor+1, false
 	case k == "enter":
 		if vis := p.visible(); p.cursor < len(vis) {
+			if p.reply == nil && p.onSubmit != nil { // local choose: no flow is waiting
+				return p, true, promptAnswer{Index: vis[p.cursor]}, p.onSubmit(p.options[vis[p.cursor]])
+			}
 			return p, true, promptAnswer{Index: vis[p.cursor]}, nil
 		}
 		return p, false, promptAnswer{}, nil
@@ -218,7 +221,7 @@ func (p popup) view(maxW, maxH int) string {
 			}
 			lines = append(lines, mark+row)
 		}
-	} else if keep := max(maxH-4-1, 1); len(lines) > keep {
+	} else if keep := max(maxH-2-min(len(hint), 1), 1); len(lines) > keep { // the box border and the hint take rows
 		lines = lines[:keep]
 	}
 	if hint != "" {

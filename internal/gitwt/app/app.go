@@ -45,6 +45,8 @@ var helpItems = []keyHelp{
 	{"s", "sync copy paths", "s sync", 0},
 	{"c", "clean stale worktrees", "c clean", 0},
 	{"d", "delete the selected worktree", "d delete", 0},
+	{"n", "new worktree from a remote or new branch", "n new", 0},
+	{"f", "fetch all remotes", "f fetch", 0},
 	{"a", "add a todo", "a add todo", panelContext},
 	{"space", "toggle the selected todo", "space toggle", panelContext},
 	{"x", "delete the selected todo", "x delete todo", panelContext},
@@ -64,6 +66,12 @@ type (
 		confirm
 		err error
 	}
+	branchesMsg struct {
+		branches []string
+		err      error
+	}
+	// addMsg is a pick from the new-worktree popups; an empty branch asks for a new branch name.
+	addMsg struct{ branch, folder string }
 	// ctxEditMsg applies fn to the selected branch's context file; action and text go to the command log.
 	ctxEditMsg struct {
 		action, text string
@@ -100,6 +108,7 @@ type model struct {
 	popup             *popup
 	log               logRing
 	busy              string // name of the running flow
+	selectBranch      string // select this branch's row on the next load (after add)
 	statusMsg         string
 	statusErr         bool
 }
@@ -209,6 +218,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 	case loadedMsg:
 		m.rows, m.err, m.loaded = msg.rows, msg.err, true
+		if b := m.selectBranch; b != "" && m.busy == "" { // the reload after add, not one that raced it
+			m.selectBranch = ""
+			if i := slices.IndexFunc(m.visible(), func(r wt.Row) bool { return r.WT.Branch == b }); i >= 0 {
+				m.sel, m.todoSel = i, 0
+			}
+		}
 		m.syncLines, m.plan, m.syncErr = msg.syncLines, msg.plan, msg.syncErr
 		if msg.syncErr != nil {
 			m.statusMsg, m.statusErr = msg.syncErr.Error(), true
@@ -222,6 +237,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			m.confirm = &msg.confirm
 		}
+	case branchesMsg:
+		switch {
+		case m.busy != "" || m.popup != nil || m.confirm != nil: // stale: something started while the list loaded
+		case msg.err != nil:
+			m.statusMsg, m.statusErr = msg.err.Error(), true
+		default:
+			m.popup = &popup{kind: popupChoose, title: "New worktree", filterable: true, pinned: 1,
+				options: append([]string{newBranch}, msg.branches...), onSubmit: func(s string) tea.Cmd {
+					if s == newBranch {
+						s = ""
+					}
+					return func() tea.Msg { return addMsg{branch: s} }
+				}}
+		}
+	case addMsg:
+		return m.add(msg)
 	case ctxEditMsg:
 		m.ctxEdit(msg)
 		return m.clamp(), nil
@@ -359,8 +390,39 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if r, ok := m.current(); ok {
 			return m, m.assess(r)
 		}
+	case "n":
+		cwd := m.cwd
+		return m, func() tea.Msg { b, err := flows.RemoteBranches(cwd); return branchesMsg{b, err} }
+	case "f":
+		return m.flow("fetch", flows.Fetch)
 	}
 	return m.clamp(), nil
+}
+
+const newBranch = "+ new branch…"
+
+// add asks for whatever the pick still lacks (a new branch name, a custom folder), then runs the add flow.
+func (m model) add(a addMsg) (tea.Model, tea.Cmd) {
+	ask := func(title string, next func(string) addMsg) {
+		in := textinput.New()
+		in.Focus()
+		m.popup = &popup{kind: popupInput, title: title, input: in, onSubmit: func(s string) tea.Cmd {
+			if s = strings.TrimSpace(s); s == "" {
+				return nil
+			}
+			return func() tea.Msg { return next(s) }
+		}}
+	}
+	switch {
+	case a.branch == "":
+		ask("New branch (from "+m.cfg.BaseBranch+")", func(s string) addMsg { return addMsg{branch: s} })
+	case m.cfg.NamingStrategy == "custom" && a.folder == "":
+		ask("Folder name for "+a.branch, func(s string) addMsg { return addMsg{a.branch, s} })
+	default:
+		m.selectBranch = a.branch
+		return m.flow("add", func(e flows.Env) error { return flows.Add(e, a.branch, a.folder) })
+	}
+	return m, nil
 }
 
 // move handles ↑/↓ for whatever has focus.
