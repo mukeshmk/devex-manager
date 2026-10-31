@@ -20,7 +20,7 @@ const (
 	popupHelp
 )
 
-// popup is a modal box. Flow questions answer through reply; input calls onSubmit.
+// popup is a modal box. Flow questions answer through reply; input, and confirms without a reply, call onSubmit.
 type popup struct {
 	kind     popupKind
 	title    string
@@ -42,6 +42,9 @@ func (p popup) update(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
 	case popupConfirm:
 		switch k {
 		case "enter", "y":
+			if p.reply == nil && p.onSubmit != nil { // local confirm: no flow is waiting
+				return p, true, promptAnswer{Bool: true}, p.onSubmit("")
+			}
 			return p, true, promptAnswer{Bool: true}, nil
 		case "esc", "n":
 			return p, true, promptAnswer{}, nil

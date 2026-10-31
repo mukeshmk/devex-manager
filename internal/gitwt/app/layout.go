@@ -131,6 +131,9 @@ func (m model) panelLines(p panel, w, h int) []string {
 	case panelContext:
 		_, _, todos := m.todos()
 		if len(todos) == 0 {
+			if r, ok := m.current(); ok && r.WT.Detached {
+				return []string{dim.Render(" No todos (detached HEAD)")}
+			}
 			return []string{dim.Render(" No todos")}
 		}
 		var out []string

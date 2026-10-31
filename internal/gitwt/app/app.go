@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -62,6 +63,11 @@ type (
 	assessedMsg struct {
 		confirm
 		err error
+	}
+	// ctxEditMsg applies fn to the selected branch's context file; action and text go to the command log.
+	ctxEditMsg struct {
+		action, text string
+		fn           func(string) (string, error)
 	}
 )
 
@@ -214,6 +220,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.confirm = &msg.confirm
 		}
+	case ctxEditMsg:
+		m.ctxEdit(msg)
+		return m.clamp(), nil
 	case logMsg:
 		m.log.Add(msg.Line)
 		return m, waitEvent(m.events)
@@ -337,9 +346,9 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.move(-1)
 	case "down", "j":
 		m = m.move(1)
-	case " ":
+	case " ", "a", "x", "C":
 		if m.focus == panelContext && !m.focusMain {
-			m.toggle()
+			return m.ctxKey(k)
 		}
 	case "/":
 		m.filtering, m.focus, m.focusMain = true, panelWorktrees, false
@@ -374,19 +383,72 @@ func (m model) move(d int) model {
 	return m
 }
 
-func (m *model) toggle() {
-	path, content, todos := m.todos()
-	if m.todoSel >= len(todos) {
+// ctxKey runs a Context panel key on the selected todo; a detached worktree has none, so nothing happens.
+func (m model) ctxKey(k string) (tea.Model, tea.Cmd) {
+	r, ok := m.current()
+	if !ok || r.WT.Branch == "" || r.WT.Detached {
+		return m, nil
+	}
+	_, content, todos := m.todos()
+	var t ctx.Todo
+	if m.todoSel < len(todos) {
+		t = todos[m.todoSel]
+	}
+	edit := func(action, text string, fn func(string) (string, error)) tea.Cmd {
+		return func() tea.Msg { return ctxEditMsg{action, text, fn} }
+	}
+	ask := func(title, action, text string, fn func(string) (string, error)) {
+		m.popup = &popup{kind: popupConfirm, title: title, onSubmit: func(string) tea.Cmd { return edit(action, text, fn) }}
+	}
+	switch {
+	case k == "a":
+		in := textinput.New()
+		in.Focus()
+		m.popup = &popup{kind: popupInput, title: "New todo for " + r.WT.Branch, input: in, onSubmit: func(s string) tea.Cmd {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return nil
+			}
+			return edit("add", s, func(c string) (string, error) { return ctx.AddTodo(c, s), nil })
+		}}
+	case k == "C":
+		if _, n := ctx.ClearDone(content); n > 0 {
+			ask(fmt.Sprintf("Clear %d done todo(s)?", n), "clear", fmt.Sprintf("%d done", n),
+				func(c string) (string, error) { nc, _ := ctx.ClearDone(c); return nc, nil })
+		}
+	case t.Index == 0:
+	case k == " ":
+		return m, edit("toggle", t.Text, func(c string) (string, error) { return ctx.SetDone(c, t.Index, !t.Done) })
+	case k == "x":
+		ask(fmt.Sprintf("Delete todo %q?", t.Text), "delete", t.Text, func(c string) (string, error) { return ctx.RemoveTodo(c, t.Index) })
+	}
+	return m, nil
+}
+
+// ctxEdit rewrites the selected branch's context file (created when missing) and logs the action.
+func (m *model) ctxEdit(e ctxEditMsg) {
+	r, ok := m.current()
+	if !ok || r.WT.Branch == "" || r.WT.Detached {
 		return
 	}
-	t := todos[m.todoSel]
-	out, err := ctx.SetDone(content, t.Index, !t.Done)
+	path := ctx.Path(m.repo.CommonDir, r.WT.Branch)
+	err := ctx.EnsureFile(path, r.WT.Branch)
+	var b []byte
+	if err == nil {
+		b, err = os.ReadFile(path)
+	}
+	var out string
+	if err == nil {
+		out, err = e.fn(string(b))
+	}
 	if err == nil {
 		err = ctx.Write(path, out)
 	}
 	if err != nil {
 		m.statusMsg, m.statusErr = err.Error(), true
+		return
 	}
+	m.log.Add("ctx: " + e.action + " " + e.text)
 }
 
 func (m model) assess(r wt.Row) tea.Cmd {
