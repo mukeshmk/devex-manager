@@ -1,4 +1,4 @@
-// Package wtapp is the full-screen `git wt` app: worktree list, details pane, single-key actions.
+// Package wtapp is the full-screen `git wt` app: lazygit-style panels, a main view, popups and single-key actions.
 package wtapp
 
 import (
@@ -7,8 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,12 +26,38 @@ const (
 	maxLost    = 10
 )
 
-var helpItems = []string{"↑↓ move", "tab todos", "space toggle", "/ filter", "s sync", "d delete", "c clean", "r refresh", "q quit"}
+// keyHelp is one key: the help popup lists every entry, the key-hint line shows those with a hint.
+type keyHelp struct {
+	keys, desc, hint string
+	on               panel // 0: every panel
+}
+
+var helpItems = []keyHelp{
+	{"1-5", "focus a panel", "1-5 panels", 0},
+	{"tab →/l", "next panel", "", 0},
+	{"shift+tab ←/h", "previous panel", "", 0},
+	{"↑/↓ j/k", "move, or scroll the main view or log", "↑↓ move", 0},
+	{"enter", "focus the main view so it scrolls", "", 0},
+	{"esc", "leave the main view, or clear the filter", "", 0},
+	{"/", "filter worktrees", "/ filter", panelWorktrees},
+	{"r", "refresh", "", 0},
+	{"s", "sync copy paths", "s sync", 0},
+	{"c", "clean merged worktrees", "c clean", 0},
+	{"d", "delete the selected worktree", "d delete", 0},
+	{"a", "add a todo", "a add todo", panelContext},
+	{"space", "toggle the selected todo", "space toggle", panelContext},
+	{"x", "delete the selected todo", "x delete todo", panelContext},
+	{"C", "clear done todos", "C clear done", panelContext},
+	{"q ctrl+c", "quit", "q quit", 0},
+	{"?", "this help", "? keys", 0},
+}
 
 type (
 	loadedMsg struct {
-		rows []wt.Row
-		err  error
+		rows            []wt.Row
+		err             error
+		syncLines, plan []string
+		syncErr         error
 	}
 	assessedMsg struct {
 		confirm
@@ -58,21 +82,29 @@ type model struct {
 	self string
 	exec func(*exec.Cmd) tea.Cmd // injectable so tests can see argv without running anything
 
-	w, h               int
-	rows               []wt.Row
-	loaded             bool
-	err                error
-	sel, todoSel       int
-	filter             string
-	filtering, inTodos bool
-	confirm            *confirm
-	status             string
-	statusErr          bool
+	w, h              int
+	rows              []wt.Row
+	loaded            bool
+	err               error
+	syncLines, plan   []string // sync --check lines and plan summaries; empty with no copy paths
+	syncErr           error
+	sel, todoSel      int
+	scroll, logScroll int // main view offset from the top, log offset from its tail
+	filter            string
+	filtering         bool
+	focus             panel
+	focusMain         bool
+	confirm           *confirm
+	popup             *popup
+	log               logRing
+	busy              string // name of the running flow
+	statusMsg         string
+	statusErr         bool
 }
 
 // New builds the app; self is the path of the running binary, re-invoked as git-wt for actions.
 func New(repo *gitx.Repo, cfg config.RepoConfig, self string) tea.Model {
-	return model{repo: repo, cfg: cfg, self: self, exec: func(c *exec.Cmd) tea.Cmd {
+	return model{repo: repo, cfg: cfg, self: self, focus: panelWorktrees, exec: func(c *exec.Cmd) tea.Cmd {
 		return tea.Exec(&paused{Cmd: c}, func(err error) tea.Msg { return execDoneMsg{c.Args, err} })
 	}}
 }
@@ -102,8 +134,19 @@ func (m model) Init() tea.Cmd { return m.load() }
 func (m model) load() tea.Cmd {
 	repo, cfg := m.repo, m.cfg
 	return func() tea.Msg {
-		rows, err := wt.Collect(repo, cfg)
-		return loadedMsg{rows, err}
+		msg := loadedMsg{}
+		msg.rows, msg.err = wt.Collect(repo, cfg)
+		if len(cfg.CopyPaths) > 0 {
+			s, err := wtsync.Session(repo, cfg)
+			if err == nil {
+				_, msg.syncLines = s.InSync()
+				for _, st := range s.Plan().Steps {
+					msg.plan = append(msg.plan, "  "+st.Summary)
+				}
+			}
+			msg.syncErr = err
+		}
+		return msg
 	}
 }
 
@@ -170,18 +213,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 	case loadedMsg:
 		m.rows, m.err, m.loaded = msg.rows, msg.err, true
+		m.syncLines, m.plan, m.syncErr = msg.syncLines, msg.plan, msg.syncErr
+		if msg.syncErr != nil {
+			m.statusMsg, m.statusErr = msg.syncErr.Error(), true
+		}
 		m = m.clamp()
 	case assessedMsg:
 		if msg.err != nil {
-			m.status, m.statusErr = "Error: "+msg.err.Error(), true
+			m.statusMsg, m.statusErr = "Error: "+msg.err.Error(), true
 		} else {
 			m.confirm = &msg.confirm
 		}
 	case execDoneMsg:
 		// The child's output vanishes with the alt screen, so say how it ended.
-		m.status, m.statusErr = strings.Join(msg.args, " ")+": done", msg.err != nil
+		m.statusMsg, m.statusErr = strings.Join(msg.args, " ")+": done", msg.err != nil
 		if msg.err != nil {
-			m.status = fmt.Sprintf("%s: %v", strings.Join(msg.args, " "), msg.err)
+			m.statusMsg = fmt.Sprintf("%s: %v", strings.Join(msg.args, " "), msg.err)
 		}
 		return m, m.load()
 	case tea.KeyMsg:
@@ -195,7 +242,15 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if k == "ctrl+c" {
 		return m, tea.Quit
 	}
-	m.status = ""
+	m.statusMsg = ""
+	if m.popup != nil {
+		p, done, _, cmd := m.popup.update(msg)
+		m.popup = &p
+		if done {
+			m.popup = nil
+		}
+		return m, cmd
+	}
 	if m.confirm != nil {
 		switch k {
 		case "y":
@@ -229,28 +284,34 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k {
 	case "q":
 		return m, tea.Quit
+	case "?":
+		m.popup = &popup{kind: popupHelp, title: "Keys", options: helpLines()}
+	case "1", "2", "3", "4", "5":
+		m.focus, m.focusMain = panel(k[0]-'0'), false
+	case "tab", "right", "l":
+		m.focus, m.focusMain = m.focus%5+1, false
+	case "shift+tab", "left", "h":
+		m.focus, m.focusMain = (m.focus+3)%5+1, false
+	case "enter":
+		if m.focus != panelLog {
+			m.focusMain, m.scroll = true, 0
+		}
 	case "esc":
-		m.inTodos, m.filter = false, ""
-	case "tab":
-		m.inTodos = !m.inTodos
+		if m.focusMain {
+			m.focusMain = false
+		} else {
+			m.filter = ""
+		}
 	case "up", "k":
-		if m.inTodos {
-			m.todoSel--
-		} else {
-			m.sel, m.todoSel = m.sel-1, 0
-		}
+		m = m.move(-1)
 	case "down", "j":
-		if m.inTodos {
-			m.todoSel++
-		} else {
-			m.sel, m.todoSel = m.sel+1, 0
-		}
+		m = m.move(1)
 	case " ":
-		if m.inTodos {
+		if m.focus == panelContext && !m.focusMain {
 			m.toggle()
 		}
 	case "/":
-		m.filtering, m.inTodos = true, false
+		m.filtering, m.focus, m.focusMain = true, panelWorktrees, false
 	case "r":
 		return m, m.load()
 	case "s":
@@ -265,6 +326,23 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.clamp(), nil
 }
 
+// move handles ↑/↓ for whatever has focus.
+func (m model) move(d int) model {
+	_, mr, lr, _ := layout(m.w, m.h)
+	switch {
+	case m.focusMain:
+		_, lines := m.mainView()
+		m.scroll = min(max(m.scroll+d, 0), max(len(lines)-(mr.h-2), 0))
+	case m.focus == panelLog:
+		m.logScroll = min(max(m.logScroll-d, 0), max(len(m.log.Lines())-(lr.h-2), 0))
+	case m.focus == panelContext:
+		m.todoSel += d
+	case m.focus == panelWorktrees:
+		m.sel, m.todoSel = m.sel+d, 0
+	}
+	return m
+}
+
 func (m *model) toggle() {
 	path, content, todos := m.todos()
 	if m.todoSel >= len(todos) {
@@ -276,7 +354,7 @@ func (m *model) toggle() {
 		err = ctx.Write(path, out)
 	}
 	if err != nil {
-		m.status, m.statusErr = err.Error(), true
+		m.statusMsg, m.statusErr = err.Error(), true
 	}
 }
 
@@ -354,170 +432,6 @@ func changes(r wt.Row) string {
 		return red.Render(fmt.Sprintf("● %d", len(r.Changed)))
 	}
 	return green.Render("clean")
-}
-
-func (m model) View() string {
-	switch {
-	case m.w == 0:
-		return ""
-	case m.w < minW || m.h < minH:
-		return tooSmall
-	}
-	bodyH := m.h - 2
-	lw := m.w * 40 / 100
-	rw := m.w - lw
-	var body string
-	switch {
-	case m.confirm != nil:
-		body = lipgloss.Place(m.w, bodyH, lipgloss.Center, lipgloss.Center, m.modal())
-	default:
-		left, right := m.listLines(lw-2, bodyH-2), m.detailLines(rw-2, bodyH-2)
-		title := "Details"
-		if r, ok := m.current(); ok {
-			title = r.Folder
-		}
-		body = lipgloss.JoinHorizontal(lipgloss.Top, ui.Box("Worktrees", left, lw, bodyH, edge(!m.inTodos)), ui.Box(title, right, rw, bodyH, edge(m.inTodos)))
-	}
-	return m.header() + "\n" + body + "\n" + m.footer()
-}
-
-func (m model) header() string {
-	l := bold.Render(" git wt · " + filepath.Base(m.repo.Root))
-	if !m.loaded {
-		return ui.Fit(l, m.w)
-	}
-	var dirty, merged int
-	for _, r := range m.rows {
-		if len(r.Changed) > 0 {
-			dirty++
-		}
-		if r.Merged {
-			merged++
-		}
-	}
-	rt := fmt.Sprintf("%d worktrees · %d dirty · %d merged ", len(m.rows), dirty, merged)
-	gap := m.w - lipgloss.Width(l) - lipgloss.Width(rt)
-	if gap < 1 {
-		return ui.Fit(l, m.w)
-	}
-	return l + strings.Repeat(" ", gap) + rt
-}
-
-func (m model) footer() string {
-	switch {
-	case m.filtering:
-		return ui.Fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
-	case m.status != "":
-		st := dim
-		if m.statusErr {
-			st = red
-		}
-		return ui.Fit(" "+st.Render(m.status), m.w)
-	}
-	items := append([]string{}, helpItems...)
-	if m.filter != "" {
-		items = append([]string{"filter: " + m.filter + " (esc clears)"}, items...)
-	}
-	// Drop the least needed hints first so the action keys survive on narrow terminals.
-	for _, drop := range []string{"↑↓ move", "space toggle", "tab todos", "r refresh", "/ filter"} {
-		if lipgloss.Width(" "+strings.Join(items, " · ")) <= m.w {
-			break
-		}
-		items = slices.DeleteFunc(items, func(s string) bool { return s == drop })
-	}
-	return ui.Fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
-}
-
-func (m model) listLines(w, h int) []string {
-	if !m.loaded {
-		return []string{" Loading…"}
-	}
-	if m.err != nil {
-		return []string{red.Render(" Error: " + m.err.Error())}
-	}
-	rows := m.visible()
-	if len(rows) == 0 {
-		return []string{dim.Render(" No matching worktrees")}
-	}
-	nameW := 0
-	for _, r := range rows {
-		nameW = max(nameW, lipgloss.Width(r.Folder))
-	}
-	nameW = min(nameW, max(w-2-8, 6)) // folder beats the remote column when narrow
-	// Scroll so the selection stays on screen.
-	start := 0
-	if m.sel >= h {
-		start = m.sel - h + 1
-	}
-	var out []string
-	for i := start; i < len(rows) && i < start+h; i++ {
-		r := rows[i]
-		mark, name := "  ", ui.Fit(r.Folder, nameW)
-		if i == m.sel {
-			mark, name = accent.Render("▸ "), bold.Render(name)
-		}
-		mg := ""
-		if r.Merged {
-			mg = yellow.Render("merged")
-		}
-		out = append(out, mark+name+" "+ui.Fit(changes(r), 7)+" "+ui.Fit(remote(r), 11)+" "+mg)
-	}
-	return out
-}
-
-func (m model) detailLines(w, h int) []string {
-	r, ok := m.current()
-	if !ok {
-		return nil
-	}
-	branch := r.WT.Branch
-	if branch == "" || r.WT.Detached {
-		branch = "(detached)"
-	}
-	path := r.WT.Path
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(path, home+string(os.PathSeparator)) {
-		path = "~" + path[len(home):]
-	}
-	label := func(k, v string) string { return " " + dim.Render(fmt.Sprintf("%-8s ", k)) + v }
-	out := []string{label("Branch", branch), label("Path", path), label("Remote", remote(r))}
-	if r.Merged {
-		out = append(out, label("Merged", yellow.Render("yes")))
-	}
-	if r.Err != nil {
-		out = append(out, red.Render(" Error: "+r.Err.Error()))
-	}
-	_, _, todos := m.todos()
-	out = append(out, "", bold.Render(" Changed files"))
-	// Leave room for the todos block (heading + at least a few items) below the file list.
-	room := max(h-len(out)-3-max(len(todos), 1), 1)
-	switch {
-	case len(r.Changed) == 0:
-		out = append(out, dim.Render("  none"))
-	case len(r.Changed) > room:
-		for _, f := range r.Changed[:room-1] {
-			out = append(out, "  "+f)
-		}
-		out = append(out, dim.Render(fmt.Sprintf("  … and %d more", len(r.Changed)-room+1)))
-	default:
-		for _, f := range r.Changed {
-			out = append(out, "  "+f)
-		}
-	}
-	out = append(out, "", bold.Render(" Context todos")+dim.Render("  (dx ctx)"))
-	if len(todos) == 0 {
-		out = append(out, dim.Render("  No todos"))
-	}
-	for i, t := range todos {
-		mark, box := "  ", "[ ]"
-		if t.Done {
-			box = green.Render("[✓]")
-		}
-		if m.inTodos && i == m.todoSel {
-			mark = accent.Render("▸ ")
-		}
-		out = append(out, mark+box+" "+t.Text)
-	}
-	return out
 }
 
 func (c confirm) canDelete() bool { return c.refuse == "" && c.safety.Safe() }
