@@ -118,7 +118,7 @@ func New(repo *gitx.Repo, cfg config.RepoConfig, cwd string) tea.Model {
 	return model{repo: repo, cfg: cfg, cwd: cwd, focus: panelWorktrees, events: make(chan tea.Msg, 256)}
 }
 
-// Run shows m (from New) full-screen until the user quits, logging every git command it runs.
+// Run shows m (from New) full-screen until the user quits, logging every git command it runs and keeping git off the terminal.
 func Run(m tea.Model) error {
 	ch := m.(model).events
 	gitx.SetCommandHook(func(c gitx.Command) {
@@ -128,6 +128,8 @@ func Run(m tea.Model) error {
 		}
 	})
 	defer gitx.SetCommandHook(nil)
+	gitx.SetQuiet(true) // add, clean, delete and assess must not reach /dev/tty either
+	defer gitx.SetQuiet(false)
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	return err
 }
