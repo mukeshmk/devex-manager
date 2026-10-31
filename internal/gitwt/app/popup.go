@@ -24,15 +24,65 @@ const (
 
 // popup is a modal box. Flow questions answer through reply; input, and confirms without a reply, call onSubmit.
 type popup struct {
-	kind     popupKind
-	title    string
-	options  []string // choose/checklist rows, or help lines
-	cursor   int
-	def      int // choose: index returned on esc
-	ticks    []bool
-	input    textinput.Model
-	reply    chan promptAnswer
-	onSubmit func(string) tea.Cmd
+	kind    popupKind
+	title   string
+	options []string // choose/checklist rows, or help lines
+	cursor  int
+	def     int // choose: index returned on esc
+	// filterable (choose only): typing narrows options by case-insensitive substring; the first pinned options always show; cursor indexes the visible list.
+	filterable bool
+	filter     string
+	pinned     int
+	ticks      []bool
+	input      textinput.Model
+	reply      chan promptAnswer
+	onSubmit   func(string) tea.Cmd
+}
+
+// visible returns the indices into options that are shown.
+func (p popup) visible() []int {
+	var idx []int
+	f := strings.ToLower(p.filter)
+	for i, o := range p.options {
+		if i < p.pinned || strings.Contains(strings.ToLower(o), f) {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
+// updateFilter handles keys of a filterable choose popup.
+func (p popup) updateFilter(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
+	edited := true
+	switch k := msg.String(); {
+	case k == "up":
+		p.cursor = max(p.cursor-1, 0)
+		return p, false, promptAnswer{}, nil
+	case k == "down":
+		p.cursor, edited = p.cursor+1, false
+	case k == "enter":
+		if vis := p.visible(); p.cursor < len(vis) {
+			return p, true, promptAnswer{Index: vis[p.cursor]}, nil
+		}
+		return p, false, promptAnswer{}, nil
+	case k == "esc" && p.filter == "":
+		return p, true, promptAnswer{Index: p.def}, nil
+	case k == "esc":
+		p.filter = ""
+	case k == "backspace":
+		if r := []rune(p.filter); len(r) > 0 {
+			p.filter = string(r[:len(r)-1])
+		}
+	case (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) && !msg.Alt:
+		p.filter += string(msg.Runes)
+	default:
+		edited = false
+	}
+	if edited && p.filter != "" {
+		p.cursor = p.pinned // land on the first real match, not the pinned row
+	}
+	p.cursor = max(min(p.cursor, len(p.visible())-1), 0)
+	return p, false, promptAnswer{}, nil
 }
 
 func (p popup) update(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
@@ -52,6 +102,9 @@ func (p popup) update(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
 			return p, true, promptAnswer{}, nil
 		}
 	case popupChoose:
+		if p.filterable {
+			return p.updateFilter(msg)
+		}
 		switch k {
 		case "up", "k":
 			p.cursor = max(p.cursor-1, 0)
@@ -116,6 +169,9 @@ func (p popup) view(maxW, maxH int) string {
 		lines = p.options
 	case popupChoose:
 		lines, hint = question[:min(len(question), max(maxH-7, 1))], "↑/↓ move · enter select · esc default"
+		if p.filterable {
+			hint = "↑/↓ move · enter select · esc clear/default"
+		}
 	case popupChecklist:
 		hint = "space tick · a all · enter apply · esc none"
 	}
@@ -127,9 +183,23 @@ func (p popup) view(maxW, maxH int) string {
 		box = "Choose"
 	}
 	if p.kind == popupChoose || p.kind == popupChecklist {
-		vis := max(min(len(p.options), maxH-4-1-len(lines)), 1) // one row is the hint
+		idx := make([]int, len(p.options))
+		for i := range idx {
+			idx[i] = i
+		}
+		room := maxH - 4 - 1 - len(lines) // one row is the hint
+		if p.filterable {
+			idx = p.visible()
+			lines = append(lines, "filter: "+p.filter)
+			room--
+			if len(idx) == 0 {
+				lines = append(lines, dim.Render("no matches"))
+			}
+		}
+		vis := max(min(len(idx), room), 1)
 		off := max(p.cursor-vis+1, 0)
-		for i := off; i < min(off+vis, len(p.options)); i++ {
+		for j := off; j < min(off+vis, len(idx)); j++ {
+			i := idx[j]
 			mark, row := "  ", p.options[i]
 			if p.kind == popupChecklist {
 				row = "[ ] " + row
