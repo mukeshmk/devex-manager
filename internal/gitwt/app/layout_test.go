@@ -84,6 +84,10 @@ func TestPanelKeys(t *testing.T) {
 	if v := m.View(); !strings.Contains(v, "line-37") || strings.Contains(v, "line-39") {
 		t.Errorf("log not scrolled:\n%s", v)
 	}
+	// Leaving the log returns it to its tail.
+	if v := press(m, "tab", "shift+tab").View(); !strings.Contains(v, "line-39") {
+		t.Errorf("log scroll kept after leaving:\n%s", v)
+	}
 }
 
 func TestResizeWithPopupOpen(t *testing.T) {
@@ -132,4 +136,26 @@ func TestSyncPanels(t *testing.T) {
 	m = press(mm, "r")
 	hasAll(t, m.View(), "sync: 1 files out of sync", "Out of sync: .env")
 	hasAll(t, press(m, "4").View(), "[4] Sync"+focusMark, ".env")
+}
+
+// Leaving the main view drops its scroll, so another worktree's details start at the top.
+func TestMainScrollResets(t *testing.T) {
+	var got [][]string
+	f, m := start(t, &got)
+	for _, d := range []string{"DEVX-1", "DEVX-2"} {
+		for i := range 40 {
+			os.WriteFile(filepath.Join(f.Root, d, fmt.Sprintf("f%02d.txt", i)), nil, 0o644)
+		}
+	}
+	m = press(m, "r", "enter") // DEVX-1 is the first row
+	for range 30 {
+		m = press(m, "down")
+	}
+	if strings.Contains(m.View(), "Branch") {
+		t.Fatalf("main view did not scroll:\n%s", m.View())
+	}
+	m = press(m, "esc", "down")
+	if v := m.View(); !strings.Contains(v, "Branch") {
+		t.Errorf("stale scroll hides Branch:\n%s", v)
+	}
 }
