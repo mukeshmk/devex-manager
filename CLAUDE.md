@@ -38,6 +38,7 @@ cmd/dx/                     main: argv[0] dispatch
 internal/cli/               cobra command wiring for every tool; one file per subcommand (wt_*.go, dx_*.go)
 internal/gitwt/worktree/    package wt      — add, clone, rm, clean, status, deletion safety (safety.go)
 internal/gitwt/sync/        package wtsync  — git wt sync: scan, plan, apply (with backups), manifest
+internal/gitwt/flows/       package flows   — sync/clean/rm flows shared by the CLI and the app
 internal/gitwt/app/         package wtapp   — full-screen worktree app (includes the dx ctx todo pane)
 internal/skills/            package skills  — skill scan, plan, apply, backups, diff/rm/edit ops
 internal/skills/app/        package skillsapp — full-screen skills grid
@@ -55,7 +56,7 @@ docs/                       workflows.md, specs, plans
 
 Errors are printed verbatim to stderr (no extra `Error:` prefix).
 
-Full-screen actions that re-invoke the binary force argv0 `git-wt`. Charm stack: lipgloss, huh, bubbletea, bubbles (keep current majors).
+In-app actions in `internal/gitwt/app` must call `flows` and never duplicate safety logic. Charm stack: lipgloss, huh, bubbletea, bubbles (keep current majors).
 
 ### Config resolution order
 
