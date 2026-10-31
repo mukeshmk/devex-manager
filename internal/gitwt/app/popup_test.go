@@ -206,3 +206,27 @@ func TestPopupFilterViewFits(t *testing.T) {
 		}
 	}
 }
+
+func TestPopupFilterMarkerOnPickedRow(t *testing.T) {
+	p := filterPopup("+ new branch…", "DSG-1 a", "DSG-2 b", "XYZ")
+	p, _, _, _ = p.update(key("dsg-2"))
+	for _, l := range strings.Split(p.view(60, 12), "\n") {
+		if strings.Contains(l, "▸") && !strings.Contains(l, "DSG-2 b") {
+			t.Fatalf("marker on wrong row: %q", l)
+		}
+	}
+	if !strings.Contains(p.view(60, 12), "▸ DSG-2 b") {
+		t.Fatalf("no marker on DSG-2:\n%s", p.view(60, 12))
+	}
+}
+
+func TestPopupFilterBackspaceKeepsOption(t *testing.T) {
+	p := filterPopup("+ new", "abc", "abd", "xyz")
+	p, _, _, _ = p.update(key("abd"))
+	p, _, _, _ = p.update(tea.KeyMsg{Type: tea.KeyBackspace})
+	p, _, _, _ = p.update(tea.KeyMsg{Type: tea.KeyBackspace})
+	p, _, _, _ = p.update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if _, _, a, _ := p.update(key("enter")); a.Index != 2 {
+		t.Fatalf("index=%d", a.Index)
+	}
+}
