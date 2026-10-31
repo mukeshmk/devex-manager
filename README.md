@@ -165,7 +165,7 @@ Context panel (that branch's `dx ctx` todos):
 | `x` | Delete the selected todo |
 | `C` | Clear done todos |
 
-Sync, clean and delete run inside the app: questions and confirmations appear as popups, and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. In a sync question, `ctrl+c` cancels the whole sync before anything changes and `esc` picks the question's default answer.
+Sync, clean and delete run inside the app: questions and confirmations appear as popups, and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. `ctrl+c` in a flow question cancels the whole action (for sync, before anything changes). `esc` depends on the question: a choose question takes its default, a confirm means no, a checklist ticks nothing, and an input cancels.
 
 The command log lists every git command the tool runs plus each action's output. It keeps the last 500 lines and scrolls when focused (`5`).
 
@@ -184,21 +184,21 @@ The command log lists every git command the tool runs plus each action's output.
 
 ### Using with lazygit
 
-Add custom commands to `~/Library/Application Support/lazygit/config.yml` on macOS (or `~/.config/lazygit/config.yml` on Linux) to open the apps from lazygit:
+Add custom commands to `~/Library/Application Support/lazygit/config.yml` on macOS (or `~/.config/lazygit/config.yml` on Linux) to open the apps from lazygit. The keys below are examples; press `?` in lazygit to check for conflicts with built-in keys in your version.
 
 ```yaml
 customCommands:
-  - key: 'W'
+  - key: '<c-g>'
     context: 'global'
     command: 'git wt'
     subprocess: true
     description: 'git wt worktree app'
-  - key: 'S'
+  - key: '<c-j>'
     context: 'global'
     command: 'dx skills'
     subprocess: true
     description: 'dx skills grid'
-  - key: 'Y'
+  - key: '<c-y>'
     context: 'global'
     command: 'git wt sync'
     output: terminal
