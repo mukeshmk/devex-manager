@@ -1,135 +1,194 @@
-# git wt app: lazygit colour scheme Implementation Plan
+# git wt app: lazygit colour scheme, configurable — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the `git wt` full-screen app use lazygit's default colour scheme. The focused border is green and bold, other borders use the terminal's default colour, key hints are blue, the filter border is cyan, and popups have green borders. The selected row in Worktrees, Context and popup lists gets a full-width highlight.
+**Goal:** By default, the `git wt` full-screen app uses lazygit's colour scheme:
+- the focused border is green and bold
+- other borders use the terminal's default colour
+- key hints are blue
+- the filter border is cyan
+- popups have green borders
+- the selected row gets a full-width blue highlight
+
+Every one of these colours can be changed in a `[theme]` section of `~/.devex.conf`.
 
 **Architecture:**
-- **Colours:** every colour lives in the one style block in `internal/gitwt/app/app.go` (the `var ( fg … )` block and `edge()`), so part 1 is a change to that block plus the few call sites that pick a border.
-- **Row highlight:** part 2 adds one helper, `ui.Highlight`, in `internal/shared/ui`. It pads a row to the panel's inner width and paints it, keeping the colours already inside the row. The Worktrees list, the Context list and the popup list call it on their selected row.
+- `config.LoadTheme` reads `[theme]` from `~/.devex.conf` and returns raw colour specs, with lazygit's defaults filled in.
+- `wtapp.SetTheme` turns those specs into lipgloss styles. It replaces the app's style variables and returns a warning for each value it doesn't understand.
+- The CLI calls it before starting the app, and any warning shows in the app's status line.
+- The new helper `ui.Highlight` pads the selected row to the panel's inner width and paints it, keeping the colours already inside the row.
 
-**Tech Stack:** Go 1.27, lipgloss v1.1.0, `github.com/charmbracelet/x/ansi` (already direct), `github.com/muesli/termenv` v0.16.0. termenv is already in go.mod as indirect. Tests import it to force a colour profile, so `go mod tidy` makes it direct. No new modules.
+**Tech Stack:** Go 1.27, lipgloss v1.1.0, `github.com/charmbracelet/x/ansi`, and `github.com/muesli/termenv` v0.16.0. termenv is already an indirect dependency; tests import it to force a colour profile, so `go mod tidy` makes it direct. No new modules.
 
-**Spec:** This plan is its own spec. The owner asked for "the same lazygit colour scheme" for `git wt` only, and chose part 1 (colours) plus part 2 (selected-row highlight) from the estimate given on 2026-10-31. The values come from `lazygit --config` (lazygit 0.66.2) `gui.theme`:
+**Spec:** This plan is the spec. The owner asked for "the same lazygit colour scheme" in `git wt` only, chose part 1 (colours) and part 2 (selected-row highlight) from the estimate on 2026-10-31, and then asked for the colours to be configurable through a config file.
+
+The defaults come from `lazygit --config` (lazygit 0.66.2) `gui.theme`:
 - `activeBorderColor: [green, bold]`
 - `inactiveBorderColor: [default]`
 - `searchingActiveBorderColor: [cyan, bold]`
 - `optionsTextColor: [blue]`
 - `selectedLineFgColor: [bold]`
+- lazygit's built-in default background for the selected line in the focused view is blue
 
-lazygit's built-in default for the focused view's selected-line background is blue. An unfocused view's selected line is only bold.
+## Config format (exact)
+
+`~/.devex.conf`:
+```ini
+[theme]
+# Colours for the git wt app. Same names and defaults as lazygit's gui.theme.
+# A value is a comma-separated list: one colour and any of bold, underline, reverse.
+# Colours: default, black, red, green, yellow, blue, magenta, cyan, white, 0-255, or #rrggbb.
+active_border_color = green, bold
+inactive_border_color = default
+searching_border_color = cyan, bold
+options_text_color = blue
+selected_line_bg_color = blue
+```
+- A missing file, a missing `[theme]` section or a missing key falls back to the defaults above.
+- Matching is case-insensitive, and spaces are trimmed.
+- In `selected_line_bg_color`, the colour sets the background. Attributes in that key are applied too. The selected row is always bold, matching lazygit's `selectedLineFgColor`.
+- If a value can't be read, only that key falls back to its default. The app starts anyway, and the status line shows `theme: unknown colour "<token>" in <key>, using default` until the first key press. If several values are bad, the first warning is shown.
+- Only `~/.devex.conf`. A repo's `.devex.conf` has no `[theme]`, because colours are personal. There are no `DX_*` env overrides.
 
 ## Global Constraints
 
-- Only `git wt`, meaning `internal/gitwt/app`, plus the new helper in `internal/shared/ui`. The `dx skills` grid (`internal/skills/app`) does not change.
-- Exact colours, as ANSI 16-colour indexes so they follow the user's terminal palette the way lazygit does:
+- Only `git wt`, meaning `internal/gitwt/app` and `internal/cli/wt_status.go`, plus new code in `internal/shared/config` and `internal/shared/ui`. The `dx skills` grid (`internal/skills/app`) does not change.
+- With no `[theme]` section, these exact values apply:
   - focused border: green `"2"`, bold
-  - unfocused border: no colour (the terminal default)
+  - unfocused border: no colour
   - filtering Worktrees border: cyan `"6"`, bold
   - key-hint line: blue `"4"`
-  - popup and confirm-modal border: green `"2"`, bold
-  - selected row in the focused panel or popup: background blue `"4"` and bold
+  - popup and confirm-modal border: the active border style
+  - selected row in the focused panel or popup: background blue `"4"`, bold
   - selected row in an unfocused panel: bold only
-- The `◆` focus marker and the `▸` row marker stay, so focus and selection still show on terminals without colour (NO_COLOR, dumb terminals). Existing tests rely on them.
-- No rendered line may exceed the terminal width at any size of 60×12 or more. The minimum-size message `Terminal too small (need 60×12)` stays.
-- Status-line colours (red errors, yellow `running…`) and text colours inside panels (yellow `merged`, green `[✓]`, dim notes) do not change.
+- Colour names map to ANSI indexes, so they follow the terminal palette the way lazygit does: black 0, red 1, green 2, yellow 3, blue 4, magenta 5, cyan 6, white 7. `default` means no colour.
+- The `◆` focus marker and the `▸` row marker stay, so focus and selection are still visible without colour. Existing tests rely on them.
+- No rendered line may exceed the terminal width at any size of 60×12 or larger. `Terminal too small (need 60×12)` stays.
+- Status-line colours (red errors, yellow `running…`) and the text colours inside panels (yellow `merged`, green `[✓]`, dim notes) are not themed and do not change.
+- The installer (`install.sh`) and its `~/.devex.conf` template do not change. The README documents `[theme]`.
 - Never run host `git` in this repo. Commit only via `docker run --rm -v "$PWD":/devex-manager -w /devex-manager personal-git:v3 bash -c '…'`. No Co-Authored-By line. Never push.
-- Tests: `go vet ./... && go test ./...` and `go test -race ./internal/gitwt/app/ ./internal/shared/ui/`.
+- Tests: `go vet ./... && go test ./...` and `go test -race ./internal/gitwt/app/ ./internal/shared/ui/ ./internal/shared/config/`.
 
 ## Review Focus
 
-1. **A coloured segment inside the selected row** (`merged` in yellow, `[✓]` in green, `↑2` in yellow): the blue background must continue across the whole row after each segment. An inner style's SGR reset must not cut the highlight short. Test in Task 2 (`TestHighlightKeepsBackgroundAfterReset`).
-2. **A selected row longer than the panel, or with wide characters (CJK, emoji):** the highlighted row must be exactly the inner width, truncated with `…`, never wider. Test in Task 2 (`TestHighlightWidth`), and through the existing `TestWidthEverySize` sweep in Task 2.
-3. **A terminal without colour, and tests without a TTY:** lipgloss renders plain text there. The app must still show focus (`◆`) and selection (`▸`), and every existing test must pass unchanged. Covered by the existing suite. New colour assertions force a colour profile in the test and restore it afterwards.
-4. **Focus moving while a row is selected:** only the focused panel's selected row gets the blue background. The other panels' selected rows are bold only. Test in Task 2 (`TestSelectedRowHighlightFollowsFocus`).
-5. **A popup opened over the panels:** the popup border is green and its cursor row is highlighted. The panel underneath keeps its own focus colours, and nothing overflows at 60×12. Test in Task 2 (`TestPopupCursorHighlighted`) and the existing popup width sweep.
+1. **A malformed `[theme]` value** (`blu`, `#12`, `300`, empty): the app must still start, use the default for that key, keep the other keys, and show one warning in the status line. It must never fail to open. Tests: `TestLoadThemeBadValues` and `TestSetThemeWarns` in Task 1.
+2. **A coloured segment inside the selected row** (yellow `merged`, green `[✓]`): the highlight background must continue across the whole row after each inner style's reset. Test: `TestHighlightKeepsBackgroundAfterReset` in Task 2.
+3. **A selected row longer than its panel, or with wide characters:** the highlighted row must be exactly the inner width and truncated with `…`. Tests: `TestHighlightWidth`, plus the existing `TestWidthEverySize` sweep, in Task 2.
+4. **A terminal without colour, and tests without a TTY:** lipgloss renders plain text there. Focus and selection must still show through `◆` and `▸`, and every existing test must pass unchanged. New colour assertions force a colour profile and restore it, and restore the default theme with `t.Cleanup`.
+5. **Focus moving while a row is selected:** only the focused panel's selected row gets the background. Other panels show their selected row in bold. Test: `TestSelectedRowHighlightFollowsFocus` in Task 2.
 
 ---
 
 ## File Structure
 
 ```
-internal/gitwt/app/app.go        style block + edge(): lazygit colours (Task 1)
-internal/gitwt/app/layout.go     filter border, hint line colour (Task 1); selected-row highlight in Worktrees/Context (Task 2)
-internal/gitwt/app/popup.go      popup border (Task 1); cursor-row highlight (Task 2)
-internal/gitwt/app/theme_test.go colour assertions with a forced colour profile (Tasks 1–2)
-internal/shared/ui/box.go        + Highlight (Task 2)
-internal/shared/ui/box_test.go   Highlight tests (Task 2)
-README.md                        one line: the app uses lazygit's default colours (Task 2)
+internal/shared/config/theme.go       Theme, DefaultTheme, LoadTheme (Task 1)
+internal/shared/config/config_test.go + theme tests (Task 1)
+internal/gitwt/app/theme.go           SetTheme, parseSpec, theme style vars (Task 1); selected-row styles (Task 2)
+internal/gitwt/app/app.go             style block + edge() use the theme vars (Task 1)
+internal/gitwt/app/layout.go          filter border, hint line (Task 1); row highlight (Task 2)
+internal/gitwt/app/popup.go           popup border (Task 1); cursor-row highlight (Task 2)
+internal/gitwt/app/theme_test.go      colour assertions with a forced colour profile (Tasks 1–2)
+internal/cli/wt_status.go             LoadTheme + SetTheme before the app starts (Task 1)
+internal/shared/ui/box.go             + Highlight (Task 2)
+internal/shared/ui/box_test.go        Highlight tests (Task 2)
+README.md                             [theme] section docs (Task 2)
 ```
 
-### Task 1: lazygit border and hint colours
+### Task 1: Configurable lazygit border and hint colours
 
 **Files:**
-- Modify: `internal/gitwt/app/app.go:549-566`. That is the style block and `edge()`. Also the confirm modal's `ui.Box(… accent)` at about line 637.
-- Modify: `internal/gitwt/app/layout.go`. The worktree box border while `m.filtering` is set or `m.filter != ""`, and `footer()`'s hint-line style at about line 278.
-- Modify: `internal/gitwt/app/popup.go:236`, the popup `ui.Box(…, accent)`.
-- Test: `internal/gitwt/app/theme_test.go`, new.
+- Create: `internal/shared/config/theme.go`, `internal/gitwt/app/theme.go`, and `internal/gitwt/app/theme_test.go`.
+- Modify:
+  - `internal/shared/config/config_test.go`
+  - `internal/gitwt/app/app.go:549-566`: the style block and `edge()`. Also the confirm-modal `ui.Box(… accent)` at about line 637.
+  - `internal/gitwt/app/layout.go`: the Worktrees border while `m.filtering || m.filter != ""`, and the `footer()` hint style at about line 278.
+  - `internal/gitwt/app/popup.go:236`
+  - `internal/gitwt/app/app.go` `New`: take the startup warning into `statusMsg`. Use the smallest change, for example a package-level `themeWarning` string that SetTheme sets and New reads.
+  - `internal/cli/wt_status.go`
 
 **Interfaces:**
+- Produces, in package config:
+  - `type Theme struct { ActiveBorder, InactiveBorder, SearchingBorder, OptionsText, SelectedLineBg string }`. These are the raw values as written, for example `"green, bold"`.
+  - `func DefaultTheme() Theme`, returning the five defaults from the Config format section verbatim.
+  - `func LoadTheme(home string) (Theme, error)`. It reads `<home>/.devex.conf` with the existing `readINI` and starts from `DefaultTheme()`. Each key present and non-empty in `[theme]` replaces its field. A missing file is not an error. A file that can't be read is an error, which the caller ignores and treats as defaults.
 - Produces, in package wtapp:
-  - `active = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)`
-  - `inactive = lipgloss.NewStyle()`
-  - `searching = …Color("6")…Bold(true)`
-  - `hintStyle = fg("4")`
-- `edge(on bool)` returns `active` or `inactive`.
-- `accent` stays, because the `▸` marker uses it. Its colour becomes green `"2"`, so the marker matches the focused border.
-- Task 2 uses `active` for nothing new. It defines its own selected-row styles.
+  - The style vars `active`, `inactive`, `searching` and `hintStyle`. `edge(on)` returns `active` or `inactive`, and `accent` (the `▸` marker) is set equal to `active`.
+  - `func SetTheme(t config.Theme) (warning string)`. It parses each field with `parseSpec`. A field that fails falls back to `parseSpec` of the same field in `config.DefaultTheme()`. It sets the style vars and returns the first warning, or `""` when everything parsed.
+  - `func parseSpec(spec string, bg bool) (lipgloss.Style, error)`. It accepts the tokens listed in Config format. When `bg` is set, the colour becomes the background. A second colour in one value is an error, and so is an unknown token. The error text is `unknown colour "<token>"`, which SetTheme wraps as `theme: unknown colour "<token>" in <key>, using default`, where `<key>` is the ini key name.
+- The CLI side, in `wt_status.go`, before `wtapp.New`: `home, _ := os.UserHomeDir(); th, _ := config.LoadTheme(home); wtapp.SetTheme(th)`.
 
-- [ ] **Step 1: Write the failing tests** in `theme_test.go`. Use a helper `withColour(t)` that calls `lipgloss.SetColorProfile(termenv.ANSI)` and restores the previous profile with `t.Cleanup`. Then, using the fixture model and `WindowSizeMsg{120, 40}` as in `layout_test.go`:
-  - `TestFocusedBorderGreenBold`: focus `[2] Worktrees`. The Worktrees box's top border line contains `active.Render("╭─")` as a substring, so the test doesn't depend on SGR ordering.
-  - `TestUnfocusedBorderDefault`: with Worktrees focused, the `[3] Context` box's top line contains `"╭─"` with no SGR immediately before it that sets a colour. Concretely, `active.Render("╭─")` is not in that line and the plain `"╭─"` is.
-  - `TestFilterBorderCyan`: press `/` and type `x`. The Worktrees top border contains `searching.Render("╭─")`.
-  - `TestHintLineBlue`: the last line of `View()`, with no status message set, contains the blue foreground SGR `"\x1b[34m"`.
-  - `TestPopupBorderGreen`: press `?`. The help popup's top border contains `active.Render("╭─")`.
-- [ ] **Step 2: Run** `go test ./internal/gitwt/app/ -run 'Border|HintLine' -v`. Expect FAIL, either undefined `active`/`searching`/`hintStyle` or a missing substring.
-- [ ] **Step 3: Implement.**
-  - Change the style block and `edge()` as in Interfaces.
-  - Pass `searching` as the Worktrees border while filtering.
-  - Pass `active` to the popup `ui.Box` and the confirm-modal `ui.Box`.
-  - Render the footer hint line with `hintStyle` instead of `dim`. The status-message and busy branches of `footer()` keep their own colours.
-- [ ] **Step 4: Run** `go test ./internal/gitwt/app/ -v`, then `go vet ./... && go test ./...`. Expect PASS. Every pre-existing test passes unchanged.
-- [ ] **Step 5: Commit** `internal/gitwt/app go.mod go.sum` with message `feat(wtapp): lazygit border and hint colours`.
+- [ ] **Step 1: Write the failing tests.**
+  - In `config_test.go`:
+    - `TestLoadThemeDefaults`: with no file in a temp HOME, the result equals `DefaultTheme()`.
+    - `TestLoadThemeOverrides`: a file containing `[theme]\noptions_text_color = magenta\n` gives `OptionsText == "magenta"` and leaves the other four fields at their defaults.
+    - `TestLoadThemeBadValues`: `active_border_color = blu` is returned raw as `"blu"`. Parsing happens in wtapp.
+  - In `theme_test.go`, use a helper `withColour(t)` that sets `lipgloss.SetColorProfile(termenv.ANSI256)`. It registers a `t.Cleanup` that restores the old profile and calls `SetTheme(config.DefaultTheme())`.
+    - `TestParseSpec`, table-driven:
+      - `"green, bold"` renders "x" equal to `lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true).Render("x")`
+      - `"default"` renders plain "x"
+      - `"#ff0000"` and `"196"` are both accepted
+      - `"blu"`, `"300"`, `"#12"` and `"red, blue"` are errors
+      - `"Blue , BOLD"` is accepted
+    - `TestSetThemeWarns`: `SetTheme` with `ActiveBorder: "blu"` returns `theme: unknown colour "blu" in active_border_color, using default`, and `active` renders like the green bold default.
+    - `TestFocusedBorderGreenBold`: with the fixture model at 120×40 and Worktrees focused, the Worktrees top border line contains `active.Render("╭─")`.
+    - `TestUnfocusedBorderDefault`: the `[3] Context` top line does not contain `active.Render("╭─")`.
+    - `TestFilterBorderCyan`: after `/` and then `x`, the Worktrees top line contains `searching.Render("╭─")`.
+    - `TestHintLineBlue`: with no status message, the last line of `View()` contains `"\x1b[34m"`.
+    - `TestPopupBorderGreen`: after `?`, the help popup's top line contains `active.Render("╭─")`.
+    - `TestThemeFromConfig`: `SetTheme(config.Theme{…defaults, ActiveBorder: "magenta"})` makes the focused border contain `lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Render("╭─")`.
+    - `TestThemeWarningInStatus`: after `SetTheme` with a bad value, `New(…)` has a `statusMsg` containing `theme: unknown colour`.
+- [ ] **Step 2: Run** `go test ./internal/shared/config/ ./internal/gitwt/app/ -run 'Theme|ParseSpec|Border|HintLine' -v`. Expect FAIL: `LoadTheme`, `SetTheme` and `parseSpec` are undefined.
+- [ ] **Step 3: Implement** the Interfaces above.
+  - Wire the styles in: the Worktrees border uses `searching` while filtering, `active` goes to the popup and confirm-modal boxes, and the footer hint line uses `hintStyle`. The footer's status and busy branches keep their colours.
+  - Call `SetTheme(config.DefaultTheme())` from a package `init` in wtapp, so tests and any caller that skips SetTheme still get the defaults.
+- [ ] **Step 4: Run** `go test ./internal/gitwt/app/ ./internal/shared/config/ -v`, then `go vet ./... && go test ./...`. Expect PASS, with every pre-existing test passing unchanged.
+- [ ] **Step 5: Commit** `internal/shared/config internal/gitwt/app internal/cli/wt_status.go go.mod go.sum` with message `feat(wtapp): lazygit colours, configurable via [theme] in ~/.devex.conf`.
 
-### Task 2: Full-width selected-row highlight
+### Task 2: Full-width selected-row highlight, plus docs
 
 **Files:**
-- Modify: `internal/shared/ui/box.go`, adding `Highlight`.
-- Test: `internal/shared/ui/box_test.go`. Create it if it doesn't exist.
-- Modify: `internal/gitwt/app/layout.go`. The `listLines` selected row at about line 319, and the Context row at about line 151.
-- Modify: `internal/gitwt/app/popup.go`, the cursor row at about line 216.
-- Modify: `internal/gitwt/app/theme_test.go`.
-- Modify: `README.md`. Add one sentence to the `git wt` app section saying it uses lazygit's default colours: green focused border, blue selected row.
+- Modify: `internal/shared/ui/box.go` (add `Highlight`).
+- Test: `internal/shared/ui/box_test.go` (create it if it is missing).
+- Modify:
+  - `internal/gitwt/app/theme.go` (add the selected-row styles)
+  - `internal/gitwt/app/layout.go` (the `listLines` selected row at about line 319, and the Context row at about line 151)
+  - `internal/gitwt/app/popup.go` (the cursor row at about line 216)
+  - `internal/gitwt/app/theme_test.go`
+  - `README.md`: in the `git wt` app section, add a short "Colours" subsection. It says the defaults match lazygit, shows the `[theme]` block from Config format verbatim, and notes that bad values fall back to defaults with a status-line warning.
 
 **Interfaces:**
-- Consumes: Task 1's `withColour(t)` test helper.
+- Consumes: Task 1's `SetTheme`, `parseSpec`, the `withColour(t)` test helper, and `config.Theme.SelectedLineBg`.
 - Produces:
-  - `func Highlight(s string, w int, st lipgloss.Style) string` in package ui.
-    - It returns `s` fitted to exactly `w` cells, using `Fit`, so it truncates with `…` and pads with spaces.
-    - `st` applies to the whole row, padding included.
-    - Every SGR reset inside `s` (`"\x1b[0m"` and `"\x1b[m"`) is followed by `st`'s opening sequence again, so the background continues to the end and inner foreground colours stay.
+  - `func Highlight(s string, w int, st lipgloss.Style) string` in package ui:
+    - It returns `s` fitted to exactly `w` cells with `Fit`, which truncates with `…` and pads with spaces.
+    - `st` is applied to the whole row, padding included.
+    - Every SGR reset inside `s` (`"\x1b[0m"` or `"\x1b[m"`) is followed again by `st`'s opening sequence, so the background reaches the end of the row and inner foreground colours survive.
     - The visible width is exactly `w`.
     - With an empty `st`, or under a no-colour profile, it returns exactly `Fit(s, w)`.
   - In package wtapp:
-    - `selFocused = lipgloss.NewStyle().Background(lipgloss.Color("4")).Bold(true)`
-    - `selBlurred = lipgloss.NewStyle().Bold(true)`
-  - The callers must pass the panel's inner width. This is the `w` that `panelLines(p, w, h)` receives, which is `box width - 2`. The popup passes its inner box width.
+    - `selFocused`, set by `SetTheme` as `parseSpec(t.SelectedLineBg, true)` plus `.Bold(true)`. The default is a blue `"4"` background, bold.
+    - `selBlurred = lipgloss.NewStyle().Bold(true)`.
+  - Callers pass the panel's inner width: the `w` that `panelLines(p, w, h)` receives, which is the box width minus 2. The popup passes its inner box width.
 
 - [ ] **Step 1: Write the failing tests.**
-  - In `box_test.go`, with `withColour`-style profile forcing (a local helper, since this is package ui):
-    - `TestHighlightWidth`: for `s` in `["abc", strings.Repeat("界", 30), "a\x1b[33mmerged\x1b[0m b"]` and `w` in `[1, 10, 40]`, check that `lipgloss.Width(Highlight(s, w, st)) == w`.
-    - `TestHighlightKeepsBackgroundAfterReset`: take `s := "x " + lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("merged") + " y"`, `st := lipgloss.NewStyle().Background(lipgloss.Color("4"))` and `out := Highlight(s, 20, st)`.
-      - Every reset in `out` except the last is immediately followed by `st`'s opening SGR. Compute that opening SGR as the prefix of `st.Render("x")` up to `"x"`.
-      - `out` contains the yellow SGR, `33`, so the inner colour is kept.
+  - In `box_test.go`, with a local profile-forcing helper:
+    - `TestHighlightWidth`: for each `s` in `["abc", strings.Repeat("界", 30), "a\x1b[33mmerged\x1b[0m b"]` and each `w` in `[1, 10, 40]`, `lipgloss.Width(Highlight(s, w, st)) == w`.
+    - `TestHighlightKeepsBackgroundAfterReset`: let `s := "x " + lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("merged") + " y"`, `st := lipgloss.NewStyle().Background(lipgloss.Color("4"))` and `out := Highlight(s, 20, st)`.
+      - Every reset in `out` except the last is immediately followed by `st`'s opening SGR. The opening SGR is the prefix of `st.Render("x")` before `"x"`.
+      - `out` still contains the yellow `33` SGR.
     - `TestHighlightNoColour`: under `termenv.Ascii`, `Highlight(s, 10, st) == Fit(s, 10)`.
   - In `theme_test.go`:
-    - `TestSelectedRowHighlightFollowsFocus`: at 120×40 with Worktrees focused, the selected worktree's line contains the opening SGR of `selFocused`. Press `3` to focus Context. Now the Worktrees selected line does not contain the blue-background SGR (`44`), but does contain bold. If the fixture has a todo, the Context selected todo line contains the `44` SGR.
-    - `TestPopupCursorHighlighted`: open a filterable choose popup with 3 options. Drive `n` with a stubbed branches message, or build the popup directly as `popup_test.go` does. The cursor row line contains the `44` SGR and no other row does.
-- [ ] **Step 2: Run** `go test ./internal/shared/ui/ ./internal/gitwt/app/ -run 'Highlight|HighlightFollowsFocus|PopupCursorHighlighted' -v`. Expect FAIL with undefined `Highlight`, `selFocused` and `selBlurred`.
-- [ ] **Step 3: Implement `Highlight`**, then wire it in:
-  - **Worktrees selected row:** build the row exactly as today, including the `▸` mark, and wrap it with `ui.Highlight(row, w, selFocused)` when `m.focus == panelWorktrees && !m.focusMain`. Otherwise wrap it with `ui.Highlight(row, w, selBlurred)`. The existing `bold.Render(name)` on the name then becomes redundant. Keep it or drop it, but keep the output width the same.
-  - **Context todo under the cursor:** the same pattern, gated on `m.focus == panelContext`. Today `▸` only shows when Context is focused. Keep that, and give the blurred cursor row `selBlurred`.
-  - **Popup cursor row:** `ui.Highlight(mark+row, innerW, selFocused)`. A popup always has focus.
-  - Leave every non-selected row unchanged.
-- [ ] **Step 4: Run** `go test -race ./internal/gitwt/app/ ./internal/shared/ui/ -v`, then `go vet ./... && go test ./...`. Expect PASS. The existing `TestWidthEverySize` sweep (60–130 × 12–40, all focus and popup states) still passes, which proves width safety with the highlight in place. Then do a manual check: `go build -o dist/dx ./cmd/dx && ln -sf dx dist/git-wt`, open it in a scratch bare repo (not this repo), and use tmux `capture-pane -e` to confirm the blue row spans the full panel width.
+    - `TestSelectedRowHighlightFollowsFocus`: at 120×40 with Worktrees focused, the selected worktree line contains the `44` background SGR. After pressing `3`, that line no longer contains `44`, and the selected todo line in Context does. Add one todo in the fixture.
+    - `TestPopupCursorHighlighted`: build a filterable choose popup with 3 options the same way `popup_test.go` does. Exactly one line of its view, the cursor row, contains `44`.
+    - `TestSelectedBgFromConfig`: `SetTheme` with `SelectedLineBg: "magenta"` makes the selected worktree line contain the `45` SGR.
+- [ ] **Step 2: Run** `go test ./internal/shared/ui/ ./internal/gitwt/app/ -run 'Highlight|FollowsFocus|PopupCursor|SelectedBg' -v`. Expect FAIL: `Highlight`, `selFocused` and `selBlurred` are undefined.
+- [ ] **Step 3: Implement `Highlight` and the styles, then wire them in.**
+  - **Worktrees selected row:** build the row as today, including `▸`. Wrap it with `ui.Highlight(row, w, selFocused)` when `m.focus == panelWorktrees && !m.focusMain`, and with `ui.Highlight(row, w, selBlurred)` otherwise.
+  - **Context row under the cursor:** use the same pattern, gated on `m.focus == panelContext`. Keep today's rule that `▸` shows only when Context is focused.
+  - **Popup cursor row:** `ui.Highlight(mark+row, innerW, selFocused)`.
+  - Leave all other rows unchanged.
+  - Write the README Colours subsection.
+- [ ] **Step 4: Run** `go test -race ./internal/gitwt/app/ ./internal/shared/ui/ ./internal/shared/config/ -v`, then `go vet ./... && go test ./...`. Expect PASS. The existing `TestWidthEverySize` sweep must still pass.
+  - Manual check: run `go build -o dist/dx ./cmd/dx && ln -sf dx dist/git-wt` and open the app in a scratch bare repo, not this repo. Use `HOME=<scratch>` with a `[theme]` that sets `active_border_color = magenta`, and run tmux `capture-pane -e`. Confirm the focused border is magenta and the blue row spans the panel. Then use a bad value and confirm the warning shows in the status line.
 - [ ] **Step 5: Commit** `internal/shared/ui internal/gitwt/app README.md` with message `feat(wtapp): lazygit-style selected-row highlight`.
