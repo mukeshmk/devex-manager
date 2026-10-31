@@ -349,7 +349,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.filter = string(r[:len(r)-1])
 			}
 		case tea.KeyRunes, tea.KeySpace:
-			m.filter += string(msg.Runes) // KeySpace carries its ' ' rune
+			m.filter += printable(msg.Runes) // KeySpace carries its ' ' rune
 		}
 		m.sel = 0
 		return m.clamp(), nil

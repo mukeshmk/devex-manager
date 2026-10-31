@@ -199,3 +199,13 @@ func TestModalShowsGoneLocalCommits(t *testing.T) {
 		t.Errorf("modal:\n%s", v)
 	}
 }
+
+func TestAppFilterPasteDropsControls(t *testing.T) {
+	_, m := start(t)
+	m = press(m, "/")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("DEVX-2\r\n"), Paste: true})
+	if f := m.(model).filter; f != "DEVX-2" {
+		t.Fatalf("filter=%q", f)
+	}
+	checkWidth(t, m.View(), 100, 30)
+}

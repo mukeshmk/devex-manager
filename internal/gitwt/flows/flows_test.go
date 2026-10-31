@@ -211,3 +211,16 @@ func TestFetchFlowPrunesAndFetches(t *testing.T) {
 		t.Fatalf("not pruned: %v", m)
 	}
 }
+
+func TestFetchFlowHeadlineIsGitError(t *testing.T) {
+	f := testutil.NewRepo(t)
+	gitx.Run(f.Root, "remote", "add", "bad", filepath.Join(f.Tmp, "nope.git"))
+	e, _, errb := addEnv(filepath.Join(f.Root, "main"))
+	if err := Fetch(e); !errors.Is(err, ErrReported) {
+		t.Fatal(err)
+	}
+	first, _, _ := strings.Cut(errb.String(), "\n")
+	if !strings.HasPrefix(first, "fatal:") && !strings.HasPrefix(first, "error:") {
+		t.Fatalf("headline %q in:\n%s", first, errb)
+	}
+}
