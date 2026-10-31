@@ -53,7 +53,11 @@ func (p popup) visible() []int {
 
 // updateFilter handles keys of a filterable choose popup.
 func (p popup) updateFilter(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd) {
-	edited := true
+	edited, typed := true, false
+	cur := -1 // original index under the cursor, kept across filter edits
+	if vis := p.visible(); p.cursor < len(vis) {
+		cur = vis[p.cursor]
+	}
 	switch k := msg.String(); {
 	case k == "up":
 		p.cursor = max(p.cursor-1, 0)
@@ -74,12 +78,14 @@ func (p popup) updateFilter(msg tea.KeyMsg) (popup, bool, promptAnswer, tea.Cmd)
 			p.filter = string(r[:len(r)-1])
 		}
 	case (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) && !msg.Alt:
-		p.filter += string(msg.Runes)
+		p.filter, typed = p.filter+string(msg.Runes), true
 	default:
 		edited = false
 	}
-	if edited && p.filter != "" {
+	if typed {
 		p.cursor = p.pinned // land on the first real match, not the pinned row
+	} else if edited {
+		p.cursor = max(slices.Index(p.visible(), cur), 0)
 	}
 	p.cursor = max(min(p.cursor, len(p.visible())-1), 0)
 	return p, false, promptAnswer{}, nil
@@ -207,7 +213,7 @@ func (p popup) view(maxW, maxH int) string {
 					row = "[x] " + row[4:]
 				}
 			}
-			if i == p.cursor {
+			if j == p.cursor {
 				mark = "▸ "
 			}
 			lines = append(lines, mark+row)
