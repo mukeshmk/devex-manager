@@ -50,7 +50,7 @@ func start(t *testing.T, got *[][]string) (*testutil.Fixture, tea.Model) {
 // (one level), except exec commands, which the injected exec swallows.
 func press(m tea.Model, keys ...string) tea.Model {
 	special := map[string]tea.KeyType{"tab": tea.KeyTab, "space": tea.KeySpace, "esc": tea.KeyEsc,
-		"enter": tea.KeyEnter, "up": tea.KeyUp, "down": tea.KeyDown, "backspace": tea.KeyBackspace}
+		"enter": tea.KeyEnter, "shift+tab": tea.KeyShiftTab, "up": tea.KeyUp, "down": tea.KeyDown, "backspace": tea.KeyBackspace}
 	for _, k := range keys {
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		if kt, ok := special[k]; ok {
@@ -89,7 +89,8 @@ func TestAppResize(t *testing.T) {
 		m, _ = m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
 		v := m.View()
 		checkWidth(t, v, sz[0], sz[1])
-		if !strings.Contains(v, "DEVX-2") || !strings.Contains(v, "q quit") {
+		// 60×12 has no rows left for list contents, only the panel frames.
+		if !strings.Contains(v, "[2] Worktrees") || !strings.Contains(v, "? keys") || sz[1] > 12 && !strings.Contains(v, "DEVX-2") {
 			t.Errorf("%v view missing content:\n%s", sz, v)
 		}
 	}
@@ -118,7 +119,7 @@ func TestAppToggleTodo(t *testing.T) {
 	p := ctx.Path(filepath.Join(f.Root, ".git"), "DEVX-2")
 	os.MkdirAll(filepath.Dir(p), 0o755)
 	os.WriteFile(p, []byte("# Context: DEVX-2\n\n## Todos\n- [ ] a\n\n## Notes\n"), 0o644)
-	m = press(m, "/", "DEVX-2", "enter", "tab", "space")
+	m = press(m, "/", "DEVX-2", "enter", "3", "space")
 	b, _ := os.ReadFile(p)
 	if !strings.Contains(string(b), "- [x] a") {
 		t.Errorf("file not toggled:\n%s", b)
@@ -127,7 +128,7 @@ func TestAppToggleTodo(t *testing.T) {
 		t.Errorf("view not refreshed:\n%s", m.View())
 	}
 	// No ctx file: "No todos" and toggling is a no-op.
-	m = press(m, "tab", "/", "backspace", "1", "enter", "tab", "space")
+	m = press(m, "2", "/", "backspace", "1", "enter", "3", "space")
 	if !strings.Contains(m.View(), "No todos") {
 		t.Errorf("want No todos:\n%s", m.View())
 	}
@@ -138,7 +139,7 @@ func TestAppFilter(t *testing.T) {
 	_, m := start(t, &got)
 	m = press(m, "/", "DEVX-2")
 	v := m.View()
-	if !strings.Contains(v, "DEVX-2") || strings.Contains(v, "DEVX-1") || strings.Contains(v, " main ") {
+	if !strings.Contains(v, "DEVX-2") || strings.Contains(v, "DEVX-1") || strings.Contains(v, "  main ") {
 		t.Errorf("filter not applied:\n%s", v)
 	}
 	m = press(m, "esc")
