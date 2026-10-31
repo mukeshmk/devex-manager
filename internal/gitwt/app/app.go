@@ -287,11 +287,11 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		m.popup = &popup{kind: popupHelp, title: "Keys", options: helpLines()}
 	case "1", "2", "3", "4", "5":
-		m.focus, m.focusMain = panel(k[0]-'0'), false
+		m.focus, m.focusMain, m.logScroll = panel(k[0]-'0'), false, 0
 	case "tab", "right", "l":
-		m.focus, m.focusMain = m.focus%5+1, false
+		m.focus, m.focusMain, m.logScroll = m.focus%5+1, false, 0
 	case "shift+tab", "left", "h":
-		m.focus, m.focusMain = (m.focus+3)%5+1, false
+		m.focus, m.focusMain, m.logScroll = (m.focus+3)%5+1, false, 0
 	case "enter":
 		if m.focus != panelLog {
 			m.focusMain, m.scroll = true, 0

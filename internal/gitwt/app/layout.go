@@ -96,8 +96,9 @@ func (m model) panels() string {
 		ps = append(ps, placed{r, m.box(p, m.panelLines(p, r.w-2, r.h-2), r)})
 	}
 	title, lines := m.mainView()
-	lines = lines[min(m.scroll, max(len(lines)-(mr.h-2), 0)):]
+	// Scroll offsets only apply while focused; enter resets scroll, and the log falls back to its tail.
 	if m.focusMain {
+		lines = lines[min(m.scroll, max(len(lines)-(mr.h-2), 0)):]
 		title += focusMark
 	}
 	ps = append(ps, placed{mr, ui.Box(title, lines, mr.w, mr.h, edge(m.focusMain))})
@@ -224,7 +225,10 @@ func (m model) logLines(h int) []string {
 	if len(l) == 0 {
 		return []string{dim.Render(" (no commands yet)")}
 	}
-	end := max(len(l)-m.logScroll, 0)
+	end := len(l)
+	if m.focus == panelLog {
+		end = max(end-m.logScroll, 0)
+	}
 	var out []string
 	for _, s := range l[max(end-h, 0):end] {
 		out = append(out, " "+clean(s))
