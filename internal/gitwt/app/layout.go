@@ -271,9 +271,9 @@ func (m model) footer() string {
 	if m.filter != "" {
 		items = append([]string{"filter: " + m.filter + " (esc clears)"}, items...)
 	}
-	// Drop global hints from the end, keeping the panel's own keys and the final "? keys".
-	for len(items) > 1 && lipgloss.Width(" "+strings.Join(items, " · ")) > m.w {
-		items = slices.Delete(items, len(items)-2, len(items)-1)
+	// Drop global hints from the end, keeping the panel's own keys and the final "q quit · ? keys".
+	for len(items) > 2 && lipgloss.Width(" "+strings.Join(items, " · ")) > m.w {
+		items = slices.Delete(items, len(items)-3, len(items)-2)
 	}
 	return ui.Fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
 }

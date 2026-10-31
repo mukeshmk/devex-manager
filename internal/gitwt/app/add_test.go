@@ -81,6 +81,11 @@ func TestAppAddRemoteBranch(t *testing.T) {
 
 func TestAppAddNewBranch(t *testing.T) {
 	f, m := addApp(t, "")
+	f.AddWorktree(t, "zzz", "zzz")
+	m = press(m, "r", "down") // select zzz, so landing on brand-new is not the kept selection
+	if r, _ := m.(model).current(); r.WT.Branch != "zzz" {
+		t.Fatalf("setup selected %+v", r.WT)
+	}
 	m = submit(press(m, "n"))
 	if p := m.(model).popup; p == nil || p.kind != popupInput || p.title != "New branch (from main)" {
 		t.Fatalf("want new branch input, got %+v", p)
@@ -97,7 +102,7 @@ func TestAppAddNewBranch(t *testing.T) {
 	if !exists(filepath.Join(f.Root, "brand-new")) {
 		t.Errorf("no folder; status %q", m.(model).statusMsg)
 	}
-	if r, _ := m.(model).current(); r.WT.Branch != "brand-new" {
+	if r, _ := m.(model).current(); r.WT.Path != filepath.Join(f.Root, "brand-new") {
 		t.Errorf("selected %+v", r.WT)
 	}
 }
@@ -146,6 +151,42 @@ func TestAppAddIgnoredWhileBusy(t *testing.T) {
 	m, _ = m.Update(branchesMsg{branches: []string{"r1"}})
 	if p := m.(model).popup; p != nil {
 		t.Errorf("stale branch list opened %+v", p)
+	}
+}
+
+// An add pick whose message lands after queued keys started a flow must not start a second flow.
+func TestAppAddStaleIgnored(t *testing.T) {
+	f, m := addApp(t, "")
+	mm := m.(model)
+	mm.busy = "sync"
+	m, cmd := mm.Update(addMsg{branch: "r1"})
+	if mm := m.(model); mm.busy != "sync" || cmd != nil || mm.selectBranch != "" {
+		t.Fatalf("stale add acted: busy %q cmd %v", mm.busy, cmd != nil)
+	}
+	mm = m.(model)
+	mm.busy = ""
+	mm.popup = &popup{kind: popupHelp}
+	if m, _ = mm.Update(addMsg{}); m.(model).popup.kind != popupHelp {
+		t.Errorf("stale add replaced the open popup: %+v", m.(model).popup)
+	}
+	if exists(filepath.Join(f.Root, "r1")) {
+		t.Error("r1 added")
+	}
+}
+
+// q quit and ? keys always stay on the hint line.
+func TestAppFooterKeepsQuit(t *testing.T) {
+	_, m := addApp(t, "")
+	for _, w := range []int{60, 80, 100, 200} {
+		for _, k := range []string{"1", "2", "3", "4", "5"} {
+			v := resize(press(m, k), w, 24).View()
+			l := strings.Split(v, "\n")
+			foot := l[len(l)-1]
+			if !strings.Contains(foot, "q quit") || !strings.Contains(foot, "? keys") {
+				t.Errorf("%d cols, panel %s: %q", w, k, foot)
+			}
+			checkWidth(t, v, w, 24)
+		}
 	}
 }
 
