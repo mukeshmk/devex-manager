@@ -123,19 +123,51 @@ A worktree is dirty if it has uncommitted changes (untracked files at or under a
 
 On a terminal, two commands open a full-screen app. Piped or scripted, they print plain tables instead.
 
-**`git wt` / `git wt status`**: worktree list on the left, details (branch, path, remote state, changed files, that branch's `dx ctx` todos) on the right.
+**`git wt` / `git wt status`**: a lazygit-style panel layout. Four panels stack on the left (1 Status, 2 Worktrees, 3 Context, 4 Sync); a main view (details of the selected panel item) sits top right, and the command log (5) below it.
+
+```
+┌ Status ───────┐┌ Main view ───────────────┐
+├ Worktrees ◆ ──┤│ branch, path, remote,    │
+│               ││ changed files, todos     │
+├ Context ──────┤├ Command log ─────────────┤
+├ Sync ─────────┤│ git commands + output    │
+└───────────────┘└──────────────────────────┘
+```
+
+Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktrees|Context) above the main view and a 3-row command log. The minimum size is 60x12.
 
 | Key | Action |
 |---|---|
-| `up`/`down` (`k`/`j`) | Move |
-| `tab` | Focus todos pane |
-| `space` | Toggle the selected todo |
-| `/` | Filter (`esc` clears) |
-| `s` | Sync |
-| `d` | Delete the selected worktree (confirm) |
-| `c` | Clean stale worktrees |
+| `1`-`5` | Focus a panel |
+| `tab`/`right`/`l`, `shift+tab`/`left`/`h` | Next / previous panel |
+| `up`/`down` (`k`/`j`) | Move, or scroll the main view or log |
+| `enter` | Focus the main view so it scrolls |
+| `esc` | Leave the main view, or clear the filter |
 | `r` | Refresh |
-| `q` | Quit |
+| `s` | Sync copy paths |
+| `c` | Clean merged worktrees |
+| `d` | Delete the selected worktree |
+| `?` | Key help |
+| `q`/`ctrl+c` | Quit |
+
+Worktrees panel:
+
+| Key | Action |
+|---|---|
+| `/` | Filter worktrees (`esc` clears) |
+
+Context panel (that branch's `dx ctx` todos):
+
+| Key | Action |
+|---|---|
+| `a` | Add a todo |
+| `space` | Toggle the selected todo |
+| `x` | Delete the selected todo |
+| `C` | Clear done todos |
+
+Sync, clean and delete run inside the app: questions and confirmations appear as popups, and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. In a sync question, `ctrl+c` cancels the whole sync before anything changes and `esc` picks the question's default answer.
+
+The command log lists every git command the tool runs plus each action's output. It keeps the last 500 lines and scrolls when focused (`5`).
 
 **`dx skills`** (no subcommand): grid of skills (rows) by master and each tool (columns), with a diff of the selected skill alongside.
 
@@ -149,6 +181,29 @@ On a terminal, two commands open a full-screen app. Piped or scripted, they prin
 | `q` | Quit |
 
 ---
+
+### Using with lazygit
+
+Add custom commands to `~/Library/Application Support/lazygit/config.yml` on macOS (or `~/.config/lazygit/config.yml` on Linux) to open the apps from lazygit:
+
+```yaml
+customCommands:
+  - key: 'W'
+    context: 'global'
+    command: 'git wt'
+    subprocess: true
+    description: 'git wt worktree app'
+  - key: 'S'
+    context: 'global'
+    command: 'dx skills'
+    subprocess: true
+    description: 'dx skills grid'
+  - key: 'Y'
+    context: 'global'
+    command: 'git wt sync'
+    output: terminal
+    description: 'git wt sync'
+```
 
 ## dx nb — Jupyter Notebook Utilities
 
