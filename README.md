@@ -126,12 +126,30 @@ On a terminal, two commands open a full-screen app. Piped or scripted, they prin
 **`git wt` / `git wt status`**: a lazygit-style panel layout. Four panels stack on the left (1 Status, 2 Worktrees, 3 Context, 4 Sync); a main view (details of the selected panel item) sits top right, and the command log (5) below it.
 
 ```
-┌ Status ───────┐┌ Main view ───────────────┐
-├ Worktrees ◆ ──┤│ branch, path, remote,    │
-│               ││ changed files, todos     │
-├ Context ──────┤├ Command log ─────────────┤
-├ Sync ─────────┤│ git commands + output    │
-└───────────────┘└──────────────────────────┘
+╭─ [1] Status ───────────╮╭─ DEVX-1 ───────────────────────────────────────────╮
+│ repo · base main       ││ Branch   feature/DEVX-1-long-branch-name           │
+│ sync: no copy paths    ││ Path     ~/code/repo/DEVX-1                        │
+╰────────────────────────╯│ Remote   no upstream                               │
+╭─ [2] Worktrees ◆ ──────╮│ Merged   yes                                       │
+│▸ DEVX-1 clean   no ups…││                                                    │
+│  DEVX-2 clean   no ups…││ Changed files                                      │
+│  main   clean   no ups…││  none                                              │
+│                        ││                                                    │
+│                        ││                                                    │
+│                        ││                                                    │
+│                        ││                                                    │
+│                        ││                                                    │
+│                        ││                                                    │
+╰────────────────────────╯│                                                    │
+╭─ [3] Context ──────────╮╰────────────────────────────────────────────────────╯
+│ No todos               │╭─ [5] Command log ──────────────────────────────────╮
+│                        ││ git worktree list --porcelain                      │
+╰────────────────────────╯│                                                    │
+╭─ [4] Sync ─────────────╮│                                                    │
+│                        ││                                                    │
+│                        ││                                                    │
+╰────────────────────────╯╰────────────────────────────────────────────────────╯
+ / filter · 1-5 panels · ↑↓ move · s sync · c clean · d delete · q quit · ? keys
 ```
 
 Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktrees|Context) above the main view and a 3-row command log. The minimum size is 60x12.
@@ -145,7 +163,7 @@ Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktr
 | `esc` | Leave the main view, or clear the filter |
 | `r` | Refresh |
 | `s` | Sync copy paths |
-| `c` | Clean merged worktrees |
+| `c` | Clean stale worktrees (merged, or upstream gone) |
 | `d` | Delete the selected worktree |
 | `?` | Key help |
 | `q`/`ctrl+c` | Quit |
@@ -165,7 +183,7 @@ Context panel (that branch's `dx ctx` todos):
 | `x` | Delete the selected todo |
 | `C` | Clear done todos |
 
-Sync, clean and delete run inside the app: questions and confirmations appear as popups, and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. `ctrl+c` in a flow question cancels the whole action (for sync, before anything changes). `esc` depends on the question: a choose question takes its default, a confirm means no, a checklist ticks nothing, and an input cancels.
+Sync, clean and delete run inside the app: questions and confirmations appear as popups over the main view (the panels and command log stay visible, so the plan an action prints is on screen while you answer), and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. `ctrl+c` in a flow question cancels the whole action (for sync, before anything changes). `esc` depends on the question: a choose question takes its default, a confirm means no, a checklist ticks nothing, and an input cancels.
 
 The command log lists every git command the tool runs plus each action's output. It keeps the last 500 lines and scrolls when focused (`5`).
 
@@ -191,12 +209,12 @@ customCommands:
   - key: 'X'
     context: 'global'
     command: 'git wt'
-    subprocess: true
+    output: terminal
     description: 'git wt worktree app'
   - key: 'U'
     context: 'global'
     command: 'dx skills'
-    subprocess: true
+    output: terminal
     description: 'dx skills grid'
   - key: 'Y'
     context: 'global'
