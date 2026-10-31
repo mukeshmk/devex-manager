@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/mukeshmk/devex-manager/internal/gitwt/sync"
+	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
@@ -123,5 +124,90 @@ func TestRemoveFlowRefusesDirty(t *testing.T) {
 	}
 	if _, serr := os.Stat(d); serr != nil {
 		t.Fatal("worktree removed")
+	}
+}
+
+func addEnv(dir string) (Env, *bytes.Buffer, *bytes.Buffer) {
+	var o, e bytes.Buffer
+	return Env{Cwd: dir, Out: &o, Err: &e}, &o, &e
+}
+
+func TestAddFlowCreatesBranchFromBase(t *testing.T) {
+	f := testutil.NewRepo(t)
+	main := filepath.Join(f.Root, "main")
+	write(t, filepath.Join(main, ".vscode", "a.json"), "x")
+	e, _, errb := addEnv(main)
+	if err := Add(e, "feat-x", ""); err != nil {
+		t.Fatalf("%v: %s", err, errb)
+	}
+	p := filepath.Join(f.Root, "feat-x")
+	if b, _ := gitx.Run(p, "branch", "--show-current"); b != "feat-x" {
+		t.Fatalf("branch %q", b)
+	}
+	if l, err := os.Readlink(filepath.Join(p, ".vscode")); err != nil || l != filepath.Join(main, ".vscode") {
+		t.Fatalf("symlink %q %v", l, err)
+	}
+}
+
+func TestAddFlowExistingRemoteBranch(t *testing.T) {
+	f := testutil.NewRepo(t)
+	seed := filepath.Join(f.Tmp, "seed")
+	gitx.Run(seed, "push", "-q", f.Origin, "main:refs/heads/r1")
+	if _, err := gitx.Run(f.Root, "fetch", "-q", "origin"); err != nil {
+		t.Fatal(err)
+	}
+	e, _, errb := addEnv(filepath.Join(f.Root, "main"))
+	if err := Add(e, "r1", ""); err != nil {
+		t.Fatalf("%v: %s", err, errb)
+	}
+	if b, _ := gitx.Run(filepath.Join(f.Root, "r1"), "branch", "--show-current"); b != "r1" {
+		t.Fatalf("branch %q", b)
+	}
+}
+
+func TestAddFlowErrorReported(t *testing.T) {
+	e, _, errb := addEnv(t.TempDir())
+	if err := Add(e, "x", ""); !errors.Is(err, ErrReported) || !strings.Contains(errb.String(), "Not in a git repository") {
+		t.Fatalf("%v %q", err, errb)
+	}
+}
+
+func TestFetchFlowNoRemoteFails(t *testing.T) {
+	f := testutil.NewRepo(t)
+	gitx.Run(f.Root, "remote", "set-url", "origin", filepath.Join(f.Tmp, "nope.git"))
+	e, _, errb := addEnv(filepath.Join(f.Root, "main"))
+	if err := Fetch(e); !errors.Is(err, ErrReported) || errb.Len() == 0 {
+		t.Fatalf("%v %q", err, errb)
+	}
+}
+
+func TestFetchFlowPrunesAndFetches(t *testing.T) {
+	f := testutil.NewRepo(t)
+	seed := filepath.Join(f.Tmp, "seed")
+	gitx.Run(seed, "push", "-q", f.Origin, "main:refs/heads/new1", "main:refs/heads/gone")
+	e, _, errb := addEnv(filepath.Join(f.Root, "main"))
+	if err := Fetch(e); err != nil {
+		t.Fatalf("%v: %s", err, errb)
+	}
+	has := func() map[string]bool {
+		bs, err := RemoteBranches(e.Cwd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]bool{}
+		for _, b := range bs {
+			m[b] = true
+		}
+		return m
+	}
+	if m := has(); !m["new1"] || !m["gone"] {
+		t.Fatalf("%v", m)
+	}
+	gitx.Run(f.Origin, "branch", "-q", "-D", "gone")
+	if err := Fetch(e); err != nil {
+		t.Fatal(err)
+	}
+	if m := has(); !m["new1"] || m["gone"] {
+		t.Fatalf("not pruned: %v", m)
 	}
 }
