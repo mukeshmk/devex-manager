@@ -252,6 +252,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}}
 		}
 	case addMsg:
+		if m.busy != "" || m.popup != nil || m.confirm != nil { // stale: keys queued behind the pick started something
+			return m, nil
+		}
 		return m.add(msg)
 	case ctxEditMsg:
 		m.ctxEdit(msg)

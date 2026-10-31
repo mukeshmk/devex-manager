@@ -149,7 +149,7 @@ On a terminal, two commands open a full-screen app. Piped or scripted, they prin
 │                        ││                                                    │
 │                        ││                                                    │
 ╰────────────────────────╯╰────────────────────────────────────────────────────╯
- / filter · 1-5 panels · ↑↓ move · s sync · c clean · d delete · n new · ? keys
+ / filter · 1-5 panels · ↑↓ move · s sync · c clean · d delete · q quit · ? keys
 ```
 
 Below 80 columns the four left panels become a 2x2 grid (Status|Sync over Worktrees|Context) above the main view and a 3-row command log. The minimum size is 60x12.
