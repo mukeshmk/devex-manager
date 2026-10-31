@@ -240,14 +240,14 @@ func (m model) footer() string {
 	switch {
 	case m.filtering:
 		return ui.Fit(" filter: "+m.filter+"▌  (enter apply · esc clear)", m.w)
-	case m.busy != "":
-		return ui.Fit(" "+yellow.Render(m.busy+" running…"), m.w)
-	case m.statusMsg != "":
+	case m.statusMsg != "": // before busy, so "wait for sync to finish" shows
 		st := dim
 		if m.statusErr {
 			st = red
 		}
 		return ui.Fit(" "+st.Render(m.statusMsg), m.w)
+	case m.busy != "":
+		return ui.Fit(" "+yellow.Render(m.busy+" running…"), m.w)
 	}
 	var own, all []string
 	for _, k := range helpItems {

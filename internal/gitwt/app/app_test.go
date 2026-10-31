@@ -2,9 +2,7 @@ package wtapp
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -18,8 +16,8 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/shared/testutil"
 )
 
-// start builds the app on a fixture with DEVX-1 and DEVX-2, loaded and sized, recording execs into got.
-func start(t *testing.T, got *[][]string) (*testutil.Fixture, tea.Model) {
+// start builds the app on a fixture with DEVX-1 and DEVX-2, loaded and sized, running from main.
+func start(t *testing.T) (*testutil.Fixture, tea.Model) {
 	t.Helper()
 	f := testutil.NewRepo(t)
 	f.AddWorktree(t, "DEVX-1", "feature/DEVX-1-long-branch-name")
@@ -32,22 +30,15 @@ func start(t *testing.T, got *[][]string) (*testutil.Fixture, tea.Model) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := New(repo, cfg, "/path/to/dx").(model)
-	m.exec = func(c *exec.Cmd) tea.Cmd {
-		if c.Path != "/path/to/dx" {
-			t.Errorf("exec path %q", c.Path)
-		}
-		*got = append(*got, c.Args)
-		return nil
-	}
+	m := New(repo, cfg, filepath.Join(f.Root, "main")).(model)
 	var tm tea.Model = m
-	tm, _ = tm.Update(m.Init()())
+	tm, _ = tm.Update(m.load()())
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return f, tm
 }
 
 // press sends keys; names are special keys, anything else is typed as runes. Commands are run and fed back
-// (one level), except exec commands, which the injected exec swallows.
+// (one level); a flow's command only starts its goroutine, so use drain for its events.
 func press(m tea.Model, keys ...string) tea.Model {
 	special := map[string]tea.KeyType{"tab": tea.KeyTab, "space": tea.KeySpace, "esc": tea.KeyEsc,
 		"enter": tea.KeyEnter, "shift+tab": tea.KeyShiftTab, "up": tea.KeyUp, "down": tea.KeyDown, "backspace": tea.KeyBackspace}
@@ -83,8 +74,7 @@ func checkWidth(t *testing.T, v string, w, h int) {
 }
 
 func TestAppResize(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	for _, sz := range [][2]int{{80, 24}, {200, 50}, {60, 12}} {
 		m, _ = m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
 		v := m.View()
@@ -97,8 +87,7 @@ func TestAppResize(t *testing.T) {
 }
 
 func TestAppTooSmall(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 50, Height: 10})
 	if v := m.View(); v != "Terminal too small (need 60×12)" {
 		t.Errorf("view %q", v)
@@ -107,15 +96,14 @@ func TestAppTooSmall(t *testing.T) {
 
 func TestAppLoading(t *testing.T) {
 	repo := &gitx.Repo{}
-	m, _ := New(repo, config.RepoConfig{}, "x").Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ := New(repo, config.RepoConfig{}, "").Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	if !strings.Contains(m.View(), "Loading…") {
 		t.Errorf("no placeholder:\n%s", m.View())
 	}
 }
 
 func TestAppToggleTodo(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	p := ctx.Path(filepath.Join(f.Root, ".git"), "DEVX-2")
 	os.MkdirAll(filepath.Dir(p), 0o755)
 	os.WriteFile(p, []byte("# Context: DEVX-2\n\n## Todos\n- [ ] a\n\n## Notes\n"), 0o644)
@@ -135,8 +123,7 @@ func TestAppToggleTodo(t *testing.T) {
 }
 
 func TestAppFilter(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	m = press(m, "/", "DEVX-2")
 	v := m.View()
 	if !strings.Contains(v, "DEVX-2") || strings.Contains(v, "DEVX-1") || strings.Contains(v, "  main ") {
@@ -149,8 +136,7 @@ func TestAppFilter(t *testing.T) {
 }
 
 func TestAppDeleteShowsConfirm(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	dirty := filepath.Join(f.Root, "DEVX-2", "dirty.txt")
 	os.WriteFile(dirty, []byte("x"), 0o644)
 	m = press(m, "r", "/", "DEVX-2", "enter", "d")
@@ -162,8 +148,8 @@ func TestAppDeleteShowsConfirm(t *testing.T) {
 	}
 	checkWidth(t, v, 100, 30)
 	m = press(m, "y") // unsafe: y does nothing, modal stays
-	if len(got) != 0 || !strings.Contains(m.View(), "n/esc close") {
-		t.Errorf("y on unsafe: execs %v\n%s", got, m.View())
+	if m.(model).busy != "" || !strings.Contains(m.View(), "n/esc close") {
+		t.Errorf("y on unsafe started %q\n%s", m.(model).busy, m.View())
 	}
 	m = press(m, "esc")
 	os.Remove(dirty)
@@ -172,64 +158,35 @@ func TestAppDeleteShowsConfirm(t *testing.T) {
 		t.Errorf("view:\n%s", m.View())
 	}
 	m = press(m, "n")
-	if len(got) != 0 || strings.Contains(m.View(), "n cancel") {
-		t.Errorf("cancel: execs %v\n%s", got, m.View())
+	if m.(model).busy != "" || strings.Contains(m.View(), "n cancel") {
+		t.Errorf("cancel started %q\n%s", m.(model).busy, m.View())
 	}
 	m = press(m, "d", "esc")
-	if len(got) != 0 {
-		t.Errorf("esc cancel ran %v", got)
-	}
-	press(m, "d", "y")
-	if len(got) != 1 || !slices.Equal(got[0], []string{"git-wt", "rm", filepath.Join(f.Root, "DEVX-2")}) {
-		t.Errorf("execs %v", got)
+	if m.(model).busy != "" || !exists(filepath.Join(f.Root, "DEVX-2")) {
+		t.Errorf("esc cancel started %q", m.(model).busy)
 	}
 }
 
 func TestAppDeleteMainRefused(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	m = press(m, "/", "main", "enter", "d")
 	if v := m.View(); !strings.Contains(v, "Refusing to remove the main worktree 'main'.") || !strings.Contains(v, "n/esc close") {
 		t.Errorf("view:\n%s", v)
 	}
-	press(m, "y")
-	if len(got) != 0 {
-		t.Errorf("y on main ran %v", got)
-	}
-}
-
-func TestAppSyncCleanExec(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
-	m = press(m, "s", "c", "enter")
-	if len(got) != 2 || !slices.Equal(got[0], []string{"git-wt", "sync"}) || !slices.Equal(got[1], []string{"git-wt", "clean"}) {
-		t.Errorf("execs %v", got)
-	}
-}
-
-func TestPausedKeepsOutput(t *testing.T) {
-	var out strings.Builder
-	p := &paused{Cmd: exec.Command("sh", "-c", "echo refused; exit 3")}
-	p.SetStdin(strings.NewReader("\n"))
-	p.SetStdout(&out)
-	p.SetStderr(&out)
-	if err := p.Run(); err == nil {
-		t.Error("child exit status lost")
-	}
-	if !strings.Contains(out.String(), "refused\n\nPress Enter to return to git wt…") {
-		t.Errorf("out %q", out.String())
+	if m = press(m, "y"); m.(model).busy != "" {
+		t.Errorf("y on main started %q", m.(model).busy)
 	}
 }
 
 // C1: the selected row's path is what rm gets, so folder beta is never confused with branch beta.
 func TestAppDeletePassesPath(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	f.AddWorktree(t, "alpha", "beta")
 	beta := f.AddWorktree(t, "beta", "gamma")
-	press(m, "r", "/", "gamma", "enter", "d", "y")
-	if len(got) != 1 || !slices.Equal(got[0], []string{"git-wt", "rm", beta}) {
-		t.Errorf("execs %v", got)
+	alpha := filepath.Join(f.Root, "alpha")
+	m = drain(t, press(m, "r", "/", "gamma", "enter", "d", "y"), 100)
+	if exists(beta) || !exists(alpha) {
+		t.Errorf("beta exists=%v alpha exists=%v; status %q", exists(beta), exists(alpha), m.(model).statusMsg)
 	}
 }
 

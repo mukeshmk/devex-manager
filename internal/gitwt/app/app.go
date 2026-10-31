@@ -2,17 +2,17 @@
 package wtapp
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/mukeshmk/devex-manager/internal/ctx"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/flows"
 	"github.com/mukeshmk/devex-manager/internal/gitwt/sync"
 	"github.com/mukeshmk/devex-manager/internal/gitwt/worktree"
 	"github.com/mukeshmk/devex-manager/internal/shared/config"
@@ -63,10 +63,6 @@ type (
 		confirm
 		err error
 	}
-	execDoneMsg struct {
-		args []string
-		err  error
-	}
 )
 
 type confirm struct {
@@ -77,10 +73,10 @@ type confirm struct {
 }
 
 type model struct {
-	repo *gitx.Repo
-	cfg  config.RepoConfig
-	self string
-	exec func(*exec.Cmd) tea.Cmd // injectable so tests can see argv without running anything
+	repo   *gitx.Repo
+	cfg    config.RepoConfig
+	cwd    string       // where flows run, so rm still refuses the worktree the user is in
+	events chan tea.Msg // flow prompts, log lines and results
 
 	w, h              int
 	rows              []wt.Row
@@ -102,34 +98,26 @@ type model struct {
 	statusErr         bool
 }
 
-// New builds the app; self is the path of the running binary, re-invoked as git-wt for actions.
-func New(repo *gitx.Repo, cfg config.RepoConfig, self string) tea.Model {
-	return model{repo: repo, cfg: cfg, self: self, focus: panelWorktrees, exec: func(c *exec.Cmd) tea.Cmd {
-		return tea.Exec(&paused{Cmd: c}, func(err error) tea.Msg { return execDoneMsg{c.Args, err} })
-	}}
+// New builds the app; cwd is where sync, clean and rm run.
+func New(repo *gitx.Repo, cfg config.RepoConfig, cwd string) tea.Model {
+	return model{repo: repo, cfg: cfg, cwd: cwd, focus: panelWorktrees, events: make(chan tea.Msg, 256)}
 }
 
-// paused runs the child, then waits for Enter so its output is read before the alt screen returns.
-type paused struct{ *exec.Cmd }
-
-func (p *paused) SetStdin(r io.Reader)  { p.Stdin = r }
-func (p *paused) SetStdout(w io.Writer) { p.Stdout = w }
-func (p *paused) SetStderr(w io.Writer) { p.Stderr = w }
-
-func (p *paused) Run() error {
-	err := p.Cmd.Run()
-	fmt.Fprint(p.Stdout, "\nPress Enter to return to git wt…")
-	bufio.NewReader(p.Stdin).ReadString('\n')
-	return err
-}
-
-// Run shows m full-screen until the user quits.
+// Run shows m (from New) full-screen until the user quits, logging every git command it runs.
 func Run(m tea.Model) error {
+	ch := m.(model).events
+	gitx.SetCommandHook(func(c gitx.Command) {
+		select {
+		case ch <- logMsg{"git " + strings.Join(c.Args, " ")}:
+		default: // a full log never stalls git
+		}
+	})
+	defer gitx.SetCommandHook(nil)
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	return err
 }
 
-func (m model) Init() tea.Cmd { return m.load() }
+func (m model) Init() tea.Cmd { return tea.Batch(m.load(), waitEvent(m.events)) }
 
 func (m model) load() tea.Cmd {
 	repo, cfg := m.repo, m.cfg
@@ -150,8 +138,10 @@ func (m model) load() tea.Cmd {
 	}
 }
 
-func (m model) run(args ...string) tea.Cmd {
-	return m.exec(&exec.Cmd{Path: m.self, Args: append([]string{"git-wt"}, args...)})
+// flow starts a shared flow in the background; its output and questions come back over m.events.
+func (m model) flow(name string, fn func(flows.Env) error) (tea.Model, tea.Cmd) {
+	m.busy = name
+	return m, runFlow(m.events, name, fn, m.cwd)
 }
 
 // visible is the filtered row list; sel indexes into it.
@@ -224,13 +214,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.confirm = &msg.confirm
 		}
-	case execDoneMsg:
-		// The child's output vanishes with the alt screen, so say how it ended.
-		m.statusMsg, m.statusErr = strings.Join(msg.args, " ")+": done", msg.err != nil
-		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("%s: %v", strings.Join(msg.args, " "), msg.err)
+	case logMsg:
+		m.log.Add(msg.Line)
+		return m, waitEvent(m.events)
+	case promptMsg:
+		p := popup{title: msg.Question, options: msg.Options, cursor: msg.Def, def: msg.Def, reply: msg.reply}
+		switch msg.Kind {
+		case promptConfirm:
+			p.kind = popupConfirm
+		case promptChoose:
+			p.kind = popupChoose
+		case promptChecklist:
+			p.kind, p.cursor, p.ticks = popupChecklist, 0, slices.Clone(msg.Pre)
 		}
-		return m, m.load()
+		m.popup = &p
+		return m, waitEvent(m.events)
+	case flowDoneMsg:
+		m.busy, m.statusErr = "", msg.Err != nil
+		lines := m.log.Lines()
+		last := ""
+		if len(lines) > 0 {
+			last = lines[len(lines)-1]
+		}
+		switch {
+		case errors.Is(msg.Err, wtsync.ErrAborted):
+			m.statusMsg, m.statusErr = msg.Name+" aborted, nothing changed", false
+		case errors.Is(msg.Err, flows.ErrReported) && last != "":
+			m.statusMsg = last
+		case msg.Err != nil:
+			m.statusMsg = msg.Err.Error()
+		default:
+			// The flow's last line says what happened, e.g. nothing to sync or where backups went.
+			m.statusMsg = msg.Name + ": done"
+			if last != "" {
+				m.statusMsg += " · " + strings.TrimSpace(last)
+			}
+		}
+		return m, tea.Batch(m.load(), waitEvent(m.events))
 	case tea.KeyMsg:
 		return m.key(msg)
 	}
@@ -239,17 +259,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
-	if k == "ctrl+c" {
+	m.statusMsg = ""
+	// Quitting mid-flow could leave a sync half-applied; ctrl+c in a popup is the flow's abort instead.
+	if m.busy != "" && (k == "q" || k == "ctrl+c" && m.popup == nil) {
+		m.statusMsg = "wait for " + m.busy + " to finish"
+		return m, nil
+	}
+	if k == "ctrl+c" && (m.popup == nil || m.popup.reply == nil) {
 		return m, tea.Quit
 	}
-	m.statusMsg = ""
 	if m.popup != nil {
-		p, done, _, cmd := m.popup.update(msg)
+		p, done, a, cmd := m.popup.update(msg)
 		m.popup = &p
 		if done {
 			m.popup = nil
+			if p.reply != nil {
+				p.reply <- a
+			}
 		}
 		return m, cmd
+	}
+	if m.busy != "" {
+		return m, nil
 	}
 	if m.confirm != nil {
 		switch k {
@@ -259,7 +290,7 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			p := m.confirm.path
 			m.confirm = nil
-			return m, m.run("rm", p)
+			return m.flow("delete", func(e flows.Env) error { return flows.Remove(e, p, false) })
 		case "n", "esc":
 			m.confirm = nil
 		}
@@ -315,9 +346,9 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m, m.load()
 	case "s":
-		return m, m.run("sync")
+		return m.flow("sync", func(e flows.Env) error { return flows.Sync(e, flows.SyncOpts{}) })
 	case "c":
-		return m, m.run("clean")
+		return m.flow("clean", func(e flows.Env) error { return flows.Clean(e, false) })
 	case "d":
 		if r, ok := m.current(); ok {
 			return m, m.assess(r)

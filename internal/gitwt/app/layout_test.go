@@ -27,8 +27,7 @@ func hasAll(t *testing.T, v string, want ...string) {
 }
 
 func TestLayoutWide(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	v := resize(m, 120, 40).View()
 	hasAll(t, v, titles...)
 	hasAll(t, v, "DEVX-2", "? keys", "sync: no copy paths")
@@ -36,8 +35,7 @@ func TestLayoutWide(t *testing.T) {
 }
 
 func TestLayoutStacked(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	v := resize(m, 70, 30).View()
 	hasAll(t, v, titles...)
 	checkWidth(t, v, 70, 30)
@@ -47,16 +45,14 @@ func TestLayoutStacked(t *testing.T) {
 }
 
 func TestLayoutTooSmall(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	if v := resize(m, 50, 10).View(); v != "Terminal too small (need 60×12)" {
 		t.Errorf("view %q", v)
 	}
 }
 
 func TestPanelKeys(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	m = press(m, "3")
 	if !strings.Contains(m.View(), "[3] Context"+focusMark) || strings.Contains(m.View(), "[2] Worktrees"+focusMark) {
 		t.Errorf("Context not marked focused:\n%s", m.View())
@@ -91,8 +87,7 @@ func TestPanelKeys(t *testing.T) {
 }
 
 func TestResizeWithPopupOpen(t *testing.T) {
-	var got [][]string
-	_, m := start(t, &got)
+	_, m := start(t)
 	m = press(m, "?")
 	hasAll(t, m.View(), "Keys", "C ", "clear done todos")
 	m = resize(m, 60, 12)
@@ -108,8 +103,7 @@ func TestResizeWithPopupOpen(t *testing.T) {
 
 // Width safety at every size, focus and popup state, with long content.
 func TestWidthEverySize(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	f.AddWorktree(t, "a-really-long-worktree-folder-name-that-will-not-fit", "feature/another-extremely-long-branch-name-here")
 	p := filepath.Join(f.Root, ".git", "info", "devex", "contexts", "DEVX-2.md")
 	os.MkdirAll(filepath.Dir(p), 0o755)
@@ -128,8 +122,7 @@ func TestWidthEverySize(t *testing.T) {
 }
 
 func TestSyncPanels(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	os.WriteFile(filepath.Join(f.Root, "DEVX-1", ".env"), []byte("A=1"), 0o644)
 	mm := m.(model)
 	mm.cfg.CopyPaths = []string{".env"}
@@ -140,8 +133,7 @@ func TestSyncPanels(t *testing.T) {
 
 // Leaving the main view drops its scroll, so another worktree's details start at the top.
 func TestMainScrollResets(t *testing.T) {
-	var got [][]string
-	f, m := start(t, &got)
+	f, m := start(t)
 	for _, d := range []string{"DEVX-1", "DEVX-2"} {
 		for i := range 40 {
 			os.WriteFile(filepath.Join(f.Root, d, fmt.Sprintf("f%02d.txt", i)), nil, 0o644)
