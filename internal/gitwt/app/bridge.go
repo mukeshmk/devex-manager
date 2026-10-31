@@ -153,4 +153,4 @@ func (r *logRing) Add(line string) {
 	}
 }
 
-func (r *logRing) Lines() []string { return r.lines }
+func (r logRing) Lines() []string { return r.lines }

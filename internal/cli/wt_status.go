@@ -45,11 +45,7 @@ func runStatus(c *cobra.Command, out, errw io.Writer) error {
 		return fail(err)
 	}
 	if interactive(c) {
-		self, err := os.Executable()
-		if err != nil {
-			return fail(err)
-		}
-		if err := wtapp.Run(wtapp.New(repo, cfg, self)); err != nil {
+		if err := wtapp.Run(wtapp.New(repo, cfg, cwd)); err != nil {
 			return fail(err)
 		}
 		return nil
