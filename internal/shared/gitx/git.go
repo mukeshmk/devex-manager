@@ -4,7 +4,6 @@ package gitx
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -44,8 +43,7 @@ func notify(c Command) {
 
 // Run executes git in dir and returns trimmed stdout; errors include stderr.
 func Run(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
+	cmd := command(dir, quiet.Load(), args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	start := time.Now()
@@ -154,8 +152,7 @@ func AheadBehind(dir, branch string) (ahead, behind int, hasUpstream bool, err e
 func ChangedFiles(dir string, extra ...string) ([]string, error) {
 	// Not Run(): its TrimSpace would eat the leading space of " M file".
 	args := append([]string{"status", "--porcelain"}, extra...)
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
+	cmd := command(dir, quiet.Load(), args...)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	start := time.Now()
