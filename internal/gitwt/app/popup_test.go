@@ -123,3 +123,86 @@ func TestPopupChooseQuestionInBody(t *testing.T) {
 		t.Errorf("question cut:\n%s", v)
 	}
 }
+
+func filterPopup(opts ...string) popup {
+	return popup{kind: popupChoose, title: "T", options: opts, filterable: true, pinned: 1}
+}
+
+func TestPopupFilterNarrows(t *testing.T) {
+	p := filterPopup("+ new branch…", "DSG-1 a", "DSG-2 b", "XYZ")
+	p, _, _, _ = p.update(key("dsg-2"))
+	_, done, a, _ := p.update(key("enter"))
+	if !done || a.Index != 2 {
+		t.Fatalf("done=%v index=%d", done, a.Index)
+	}
+}
+
+func TestPopupFilterKeepsPinned(t *testing.T) {
+	p := filterPopup("+ new branch…", "DSG-1 a")
+	p, _, _, _ = p.update(key("zzz"))
+	if v := p.view(60, 12); !strings.Contains(v, "+ new branch…") || strings.Contains(v, "DSG-1") {
+		t.Fatalf("view:\n%s", v)
+	}
+	_, done, a, _ := p.update(key("enter"))
+	if !done || a.Index != 0 {
+		t.Fatalf("done=%v index=%d", done, a.Index)
+	}
+	p.pinned = 0
+	if v := p.view(60, 12); !strings.Contains(v, "no matches") {
+		t.Fatalf("view:\n%s", v)
+	}
+	if _, done, _, _ := p.update(key("enter")); done {
+		t.Fatal("enter with nothing visible must not close")
+	}
+}
+
+func TestPopupFilterEscClearsThenCancels(t *testing.T) {
+	p := filterPopup("+ new", "abc", "abd")
+	p.def = 0
+	p, _, _, _ = p.update(key("abd"))
+	p, _, _, _ = p.update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if p.filter != "ab" {
+		t.Fatalf("filter=%q", p.filter)
+	}
+	p, done, _, _ := p.update(key("esc"))
+	if done || p.filter != "" {
+		t.Fatalf("first esc: done=%v filter=%q", done, p.filter)
+	}
+	if _, done, _, _ := p.update(key("esc")); !done {
+		t.Fatal("second esc should cancel")
+	}
+	// j/k type, ctrl+c aborts
+	p, _, _, _ = p.update(key("j"))
+	if p.filter != "j" {
+		t.Fatalf("j not typed: %q", p.filter)
+	}
+	if _, done, a, _ := p.update(key("ctrl+c")); !done || !a.Abort {
+		t.Fatal("ctrl+c should abort")
+	}
+}
+
+func TestPopupFilterViewFits(t *testing.T) {
+	opts := make([]string, 200)
+	for i := range opts {
+		opts[i] = strings.Repeat("x", 120)
+	}
+	p := filterPopup(opts...)
+	p.cursor = 199
+	p, _, _, _ = p.update(key("x"))
+	for _, c := range []int{0, 199} {
+		p.cursor = c
+		v := p.view(60, 12)
+		lines := strings.Split(v, "\n")
+		if len(lines) > 12 {
+			t.Errorf("%d lines", len(lines))
+		}
+		for _, l := range lines {
+			if w := lipgloss.Width(l); w > 60 {
+				t.Errorf("width %d", w)
+			}
+		}
+		if !strings.Contains(v, "filter: x") || !strings.Contains(v, "▸") {
+			t.Errorf("missing filter/cursor:\n%s", v)
+		}
+	}
+}
