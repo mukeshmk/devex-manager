@@ -8,8 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/mukeshmk/devex-manager/internal/gitwt/worktree"
-	"github.com/mukeshmk/devex-manager/internal/shared/config"
+	"github.com/mukeshmk/devex-manager/internal/gitwt/flows"
 	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 	"github.com/mukeshmk/devex-manager/internal/shared/ui"
 )
@@ -59,36 +58,23 @@ func runAdd(in *os.File, out, errw io.Writer, args []string) error {
 		}
 		fmt.Fprintln(out, co.blue.Render("Selected branch: ")+branch)
 	}
-	repo, err := gitx.Open(cwd)
-	if err != nil {
-		return fail(err.Error())
-	}
-	cfg, err := config.LoadRepo(repo.Root)
-	if err != nil {
-		return fail(err.Error())
-	}
-	if _, err := wt.Add(repo, cfg, branch, folder, out); err != nil {
-		return fail(err.Error())
+	e := flows.Env{Cwd: cwd, Out: out, Err: errw}
+	if err := flows.Add(e, branch, folder); err != nil {
+		return errExit1
 	}
 	return nil
 }
 
 // pickRemoteBranch returns "" when the user cancels or nothing is left to pick.
 func pickRemoteBranch(cwd string, out io.Writer) (string, error) {
-	repo, err := gitx.Open(cwd)
-	if err != nil {
+	if _, err := gitx.Open(cwd); err != nil { // fail before announcing the search
 		return "", err
 	}
 	fmt.Fprintln(out, "No branch specified. Searching for remote branches...")
-	raw, err := gitx.Run(repo.CommonDir, "branch", "-r")
+	choices, err := flows.RemoteBranches(cwd)
 	if err != nil {
 		return "", err
 	}
-	wts, err := repo.Worktrees()
-	if err != nil {
-		return "", err
-	}
-	choices := wt.RemoteBranchChoices(raw, wts)
 	if len(choices) == 0 {
 		return "", nil
 	}

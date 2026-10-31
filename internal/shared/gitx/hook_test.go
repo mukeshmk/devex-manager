@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestCommandHookSeesRuns(t *testing.T) {
@@ -33,5 +34,25 @@ func TestCommandHookConcurrent(t *testing.T) {
 	wg.Wait()
 	if n != 20 {
 		t.Fatalf("got %d hook calls, want 20", n)
+	}
+}
+
+func TestRunQuietNoPrompt(t *testing.T) {
+	t.Setenv("GIT_ASKPASS", "")
+	var got []Command
+	SetCommandHook(func(c Command) { got = append(got, c) })
+	t.Cleanup(func() { SetCommandHook(nil) })
+	done := make(chan error, 1)
+	go func() { _, err := RunQuiet(t.TempDir(), "ls-remote", "https://127.0.0.1:1/x.git"); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("want error")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunQuiet hung")
+	}
+	if len(got) != 1 || got[0].Err == nil {
+		t.Fatalf("hook got %+v", got)
 	}
 }
