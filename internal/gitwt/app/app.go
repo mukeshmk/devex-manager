@@ -43,7 +43,7 @@ var helpItems = []keyHelp{
 	{"/", "filter worktrees", "/ filter", panelWorktrees},
 	{"r", "refresh", "", 0},
 	{"s", "sync copy paths", "s sync", 0},
-	{"c", "clean merged worktrees", "c clean", 0},
+	{"c", "clean stale worktrees", "c clean", 0},
 	{"d", "delete the selected worktree", "d delete", 0},
 	{"a", "add a todo", "a add todo", panelContext},
 	{"space", "toggle the selected todo", "space toggle", panelContext},
@@ -215,9 +215,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m = m.clamp()
 	case assessedMsg:
-		if msg.err != nil {
+		switch {
+		case m.busy != "" || m.popup != nil: // stale: a flow or popup started while assess ran
+		case msg.err != nil:
 			m.statusMsg, m.statusErr = "Error: "+msg.err.Error(), true
-		} else {
+		default:
 			m.confirm = &msg.confirm
 		}
 	case ctxEditMsg:
@@ -240,23 +242,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitEvent(m.events)
 	case flowDoneMsg:
 		m.busy, m.statusErr = "", msg.Err != nil
-		lines := m.log.Lines()
-		last := ""
-		if len(lines) > 0 {
-			last = lines[len(lines)-1]
-		}
 		switch {
 		case errors.Is(msg.Err, wtsync.ErrAborted):
 			m.statusMsg, m.statusErr = msg.Name+" aborted, nothing changed", false
-		case errors.Is(msg.Err, flows.ErrReported) && last != "":
-			m.statusMsg = last
+		case errors.Is(msg.Err, flows.ErrReported) && msg.FirstErr != "":
+			m.statusMsg = msg.FirstErr // the headline; later lines are details and hints
 		case msg.Err != nil:
 			m.statusMsg = msg.Err.Error()
 		default:
 			// The flow's last line says what happened, e.g. nothing to sync or where backups went.
 			m.statusMsg = msg.Name + ": done"
-			if last != "" {
-				m.statusMsg += " · " + strings.TrimSpace(last)
+			if msg.LastOut != "" {
+				m.statusMsg += " · " + msg.LastOut
 			}
 		}
 		return m, tea.Batch(m.load(), waitEvent(m.events))

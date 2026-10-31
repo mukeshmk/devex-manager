@@ -2,6 +2,7 @@ package wtapp
 
 import (
 	"bytes"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -27,10 +28,12 @@ type (
 		Ticks []bool
 		Abort bool
 	}
-	logMsg      struct{ Line string }
+	logMsg struct{ Line string }
+	// flowDoneMsg carries the flow's own first error line and last output line, so the status never picks up a stray log line.
 	flowDoneMsg struct {
-		Name string
-		Err  error
+		Name              string
+		Err               error
+		FirstErr, LastOut string
 	}
 )
 
@@ -97,8 +100,9 @@ func (p *chanPrompter) Aborted() bool { return p.aborted }
 
 // logWriter turns written text into one logMsg per line. Lines are dropped when the channel is full so a flow never stalls on logging.
 type logWriter struct {
-	ch  chan tea.Msg
-	buf []byte
+	ch          chan tea.Msg
+	buf         []byte
+	first, last string // first and last non-empty lines, trimmed
 }
 
 func (w *logWriter) Write(b []byte) (int, error) {
@@ -114,8 +118,15 @@ func (w *logWriter) Write(b []byte) (int, error) {
 }
 
 func (w *logWriter) send(line string) {
+	line = ansi.Strip(line)
+	if t := strings.TrimSpace(line); t != "" {
+		if w.first == "" {
+			w.first = t
+		}
+		w.last = t
+	}
 	select {
-	case w.ch <- logMsg{ansi.Strip(line)}:
+	case w.ch <- logMsg{line}:
 	default:
 	}
 }
@@ -132,10 +143,11 @@ func (w *logWriter) flush() {
 func runFlow(ch chan tea.Msg, name string, fn func(flows.Env) error, cwd string) tea.Cmd {
 	return func() tea.Msg {
 		go func() {
-			lw := &logWriter{ch: ch}
-			err := fn(flows.Env{Cwd: cwd, Out: lw, Err: lw, Prompter: &chanPrompter{ch: ch}, TTY: true})
-			lw.flush()
-			ch <- flowDoneMsg{name, err}
+			out, errw := &logWriter{ch: ch}, &logWriter{ch: ch}
+			err := fn(flows.Env{Cwd: cwd, Out: out, Err: errw, Prompter: &chanPrompter{ch: ch}, TTY: true})
+			out.flush()
+			errw.flush()
+			ch <- flowDoneMsg{name, err, errw.first, out.last}
 		}()
 		return nil
 	}

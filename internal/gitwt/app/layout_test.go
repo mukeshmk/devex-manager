@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -116,6 +117,30 @@ func TestWidthEverySize(t *testing.T) {
 		for w := 60; w <= 130; w += 7 {
 			for h := 12; h <= 40; h += 5 {
 				checkWidth(t, resize(mk, w, h).View(), w, h)
+			}
+		}
+	}
+	// Flow popups over a log holding a long sync plan.
+	mm = m.(model)
+	for i := range 60 {
+		mm.log.Add("  copy " + strings.Repeat("deep/", 20) + fmt.Sprint(i) + ".json main → feat")
+	}
+	long := "Conflict in " + strings.Repeat("very/long/path/", 12) + "settings.json. Modified in feat and main. Which version to keep?"
+	reply := make(chan promptAnswer, 1)
+	for _, p := range []popup{
+		{kind: popupConfirm, title: "Apply these changes?", reply: reply},
+		{kind: popupConfirm, title: long, reply: reply},
+		{kind: popupChoose, title: long, options: []string{"keep main", "keep feat", "keep both"}, reply: reply},
+		{kind: popupChecklist, title: "Select worktrees to remove", options: slices.Repeat([]string{strings.Repeat("w", 90)}, 30), ticks: make([]bool, 30), reply: reply},
+	} {
+		mm.popup = &p
+		for w := 60; w <= 130; w += 7 {
+			for h := 12; h <= 40; h += 5 {
+				v := resize(mm, w, h).View()
+				checkWidth(t, v, w, h)
+				if !strings.Contains(v, "Command log") {
+					t.Errorf("%d×%d kind %d: log hidden", w, h, p.kind)
+				}
 			}
 		}
 	}

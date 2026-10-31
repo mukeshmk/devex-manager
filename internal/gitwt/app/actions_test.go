@@ -198,3 +198,70 @@ func TestAppNoCopyPaths(t *testing.T) {
 		t.Errorf("popup %+v status %q log %v", mm.popup, mm.statusMsg, mm.log.Lines())
 	}
 }
+
+// A delete assessment that lands after a flow started must not open the delete modal over the flow's popup.
+func TestAppStaleAssessIgnored(t *testing.T) {
+	main, feat, m := syncApp(t)
+	write(t, filepath.Join(feat, ".vscode", "a.json"), "feat")
+	m, assess := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	m = drain(t, press(m, "s"), 100)
+	m, _ = m.Update(assess())
+	if c := m.(model).confirm; c != nil {
+		t.Fatalf("stale assessment opened the delete modal: %+v", c)
+	}
+	if v := m.View(); !strings.Contains(v, "Apply these changes?") {
+		t.Fatalf("flow popup hidden:\n%s", v)
+	}
+	m = drain(t, press(m, "n"), 100)
+	if exists(filepath.Join(main, ".vscode", "a.json")) || m.(model).confirm != nil {
+		t.Errorf("n applied the sync or left a modal; status %q", m.(model).statusMsg)
+	}
+}
+
+// The panels and the command log, with the plan just printed, stay on screen under a flow popup.
+func TestAppPopupKeepsLog(t *testing.T) {
+	_, feat, m := syncApp(t)
+	write(t, filepath.Join(feat, ".vscode", "a.json"), "feat")
+	m = drain(t, press(m, "s"), 100)
+	lines := m.(model).log.Lines()
+	last := strings.TrimSpace(lines[len(lines)-1])
+	last = last[:min(len(last), 20)]
+	for _, sz := range [][2]int{{100, 30}, {80, 24}, {70, 30}, {60, 12}} {
+		v := resize(m, sz[0], sz[1]).View()
+		hasAll(t, v, "Command log", last, "Apply these changes?")
+		if sz[0] >= 80 {
+			hasAll(t, v, "[2] Worktrees")
+		}
+		checkWidth(t, v, sz[0], sz[1])
+	}
+}
+
+func TestAppSyncBlockedStatus(t *testing.T) {
+	main, _, m := syncApp(t)
+	write(t, filepath.Join(main, ".vscode", "a.json.devex-conflict-feat"), "x")
+	m = drain(t, press(m, "s"), 100)
+	if s := m.(model).statusMsg; !strings.HasPrefix(s, "Sync blocked") || !m.(model).statusErr {
+		t.Errorf("status %q", s)
+	}
+}
+
+// A git hook line logged after the flow's own output must not become the status.
+func TestAppStatusIgnoresLateLogLines(t *testing.T) {
+	_, feat, m := syncApp(t)
+	write(t, filepath.Join(feat, ".vscode", "a.json"), "feat")
+	m = drain(t, press(m, "s"), 100)
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	ch := m.(model).events
+	for {
+		msg := <-ch
+		if _, done := msg.(flowDoneMsg); done {
+			m, _ = m.Update(logMsg{"git status --porcelain\r"})
+			m, _ = m.Update(msg)
+			break
+		}
+		m, _ = m.Update(msg)
+	}
+	if s := m.(model).statusMsg; s != "sync: done · ✓ Synchronization complete!" {
+		t.Errorf("status %q", s)
+	}
+}
