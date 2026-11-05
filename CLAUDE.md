@@ -51,6 +51,7 @@ internal/shared/testutil/   temp git repo helpers for tests
 shell/auto-venv/            auto-venv.sh hook + its Bash test
 shell/git-aliases/          install.sh / uninstall.sh for the git aliases
 shell/completions/          git-wt.bash (git's completion needs a _git_wt function)
+skills/git-wt/              agent skill (SKILL.md) that install.sh copies to ~/.claude/skills/git-wt
 docs/                       workflows.md, specs, plans
 ```
 

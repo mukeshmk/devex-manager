@@ -50,6 +50,13 @@ else
     echo "  - git-wt-tools directory not found"
 fi
 
+if [ -d "$HOME/.claude/skills/git-wt" ]; then
+    rm -rf "${HOME:?}/.claude/skills/git-wt"
+    echo "  ✓ Removed git-wt agent skill"
+else
+    echo "  - git-wt agent skill not found"
+fi
+
 # 2. Remove Git aliases
 echo -e "\n${YELLOW}Would you like to remove the Git aliases installed by DevEx Manager?${NC}"
 read -p "(y/n) " -n 1 -r || REPLY=n

@@ -97,6 +97,12 @@ fetch_file "shell/completions/git-wt.bash" "$WT_TOOLS_DIR/git-wt-completion.sh"
 if [[ "$SHELL" == */zsh ]]; then COMP_SHELL=zsh; else COMP_SHELL=bash; fi
 "$INSTALL_DIR/dx" completion "$COMP_SHELL" > "$WT_TOOLS_DIR/dx-completion.sh"
 
+# 3b. Agent skill (teaches Claude Code to use git wt and .devex.conf)
+CLAUDE_SKILL_DIR="$HOME/.claude/skills/git-wt"
+echo "Installing git-wt agent skill to $CLAUDE_SKILL_DIR..."
+mkdir -p "$CLAUDE_SKILL_DIR"
+fetch_file "skills/git-wt/SKILL.md" "$CLAUDE_SKILL_DIR/SKILL.md"
+
 # 4. Optional: Install Git Aliases
 echo -e "\n${YELLOW}Would you like to install the recommended Git shortcuts (e.g., 'git s' for status)?${NC}"
 read -p "(y/n) " -n 1 -r || REPLY=n
