@@ -61,6 +61,31 @@ func TestAddNewBranchFromBase(t *testing.T) {
 	}
 }
 
+func TestAddNestedAndMissingPaths(t *testing.T) {
+	f := testutil.NewRepo(t)
+	os.MkdirAll(filepath.Join(f.Root, "main", ".cache", "sp"), 0o755) // parent untracked, so absent in the new worktree
+	os.MkdirAll(filepath.Join(f.Root, "main", ".cache", "cp"), 0o755)
+	repo, cfg := openFix(t, f)
+	cfg.SymlinkPaths = []string{".cache/sp", ".docs/nope"}
+	cfg.CopyPaths = []string{".cache/cp", "gone"}
+	var out bytes.Buffer
+	p, err := Add(repo, cfg, "DEVX-7-x", "", &out)
+	if err != nil {
+		t.Fatal(err, out.String())
+	}
+	if l, err := os.Readlink(filepath.Join(p, ".cache", "sp")); err != nil || l != filepath.Join(f.Root, "main", ".cache", "sp") {
+		t.Fatalf("nested symlink %q %v", l, err)
+	}
+	if !isDir(filepath.Join(p, ".cache", "cp")) {
+		t.Fatal("nested copy missing")
+	}
+	for _, w := range []string{"  Skipping .docs/nope: not found in main worktree", "  Skipping gone: not found in main worktree"} {
+		if !strings.Contains(out.String(), w) {
+			t.Errorf("missing %q in\n%s", w, out.String())
+		}
+	}
+}
+
 func TestAddExistingRemoteBranch(t *testing.T) {
 	f := testutil.NewRepo(t)
 	bare := filepath.Join(f.Root, ".git")

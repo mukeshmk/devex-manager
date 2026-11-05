@@ -50,11 +50,15 @@ func Add(repo *gitx.Repo, cfg config.RepoConfig, branch, customFolder string, ou
 	fmt.Fprintln(out, "[2/3] Symlinking configuration directories...")
 	if hasMain {
 		for _, p := range cfg.SymlinkPaths {
-			if p = strings.TrimSpace(p); p == "" || !exists(filepath.Join(main, p)) {
+			if p = strings.TrimSpace(p); p == "" || !inMain(main, p, out) {
 				continue
 			}
 			fmt.Fprintf(out, "  Symlinking %s...\n", p)
-			if err := os.Symlink(filepath.Join(main, p), filepath.Join(path, p)); err != nil {
+			dst := filepath.Join(path, p)
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { // nested path whose parent is untracked
+				return "", err
+			}
+			if err := os.Symlink(filepath.Join(main, p), dst); err != nil {
 				return "", err
 			}
 		}
@@ -66,7 +70,7 @@ func Add(repo *gitx.Repo, cfg config.RepoConfig, branch, customFolder string, ou
 	switch {
 	case hasMain && len(cfg.CopyPaths) > 0:
 		for _, p := range cfg.CopyPaths {
-			if p = strings.TrimSpace(p); p == "" || !exists(filepath.Join(main, p)) {
+			if p = strings.TrimSpace(p); p == "" || !inMain(main, p, out) {
 				continue
 			}
 			fmt.Fprintf(out, "  Copying %s...\n", p)
@@ -105,6 +109,15 @@ func RemoteBranchChoices(raw string, wts []gitx.Worktree) []string {
 	}
 	sort.Strings(res)
 	return res
+}
+
+// inMain reports whether p exists in the main worktree, saying so when it doesn't (usually a typo in .devex.conf).
+func inMain(main, p string, out io.Writer) bool {
+	if exists(filepath.Join(main, p)) {
+		return true
+	}
+	fmt.Fprintf(out, "  Skipping %s: not found in main worktree\n", p)
+	return false
 }
 
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
