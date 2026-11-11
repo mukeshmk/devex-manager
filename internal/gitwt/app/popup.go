@@ -233,7 +233,7 @@ func (p popup) view(maxW, maxH int) string {
 		longest = max(longest, lipgloss.Width(l))
 	}
 	w := min(maxW-4, max(40, longest+4))
-	return ui.Box(box, lines, w, len(lines)+2, accent)
+	return ui.Box(box, lines, w, len(lines)+2, active)
 }
 
 // printable drops control runes: a bracketed paste keeps \r and \n, which would break the box.

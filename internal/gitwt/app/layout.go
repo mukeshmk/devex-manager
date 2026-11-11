@@ -117,7 +117,11 @@ func (m model) box(p panel, lines []string, r rect) string {
 	if on {
 		title += focusMark
 	}
-	return ui.Box(title, lines, r.w, r.h, edge(on))
+	border := edge(on)
+	if p == panelWorktrees && (m.filtering || m.filter != "") {
+		border = searching
+	}
+	return ui.Box(title, lines, r.w, r.h, border)
 }
 
 // clean makes free text safe to measure: tabs and carriage returns would move the cursor unseen.
@@ -275,7 +279,7 @@ func (m model) footer() string {
 	for len(items) > 2 && lipgloss.Width(" "+strings.Join(items, " · ")) > m.w {
 		items = slices.Delete(items, len(items)-3, len(items)-2)
 	}
-	return ui.Fit(dim.Render(" "+strings.Join(items, " · ")), m.w)
+	return ui.Fit(hintStyle.Render(" "+strings.Join(items, " · ")), m.w)
 }
 
 func helpLines() []string {

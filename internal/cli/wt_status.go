@@ -45,6 +45,9 @@ func runStatus(c *cobra.Command, out, errw io.Writer) error {
 		return fail(err)
 	}
 	if interactive(c) {
+		home, _ := os.UserHomeDir()
+		th, _ := config.LoadTheme(home) // an unreadable file just means defaults
+		wtapp.SetTheme(th)
 		if err := wtapp.Run(wtapp.New(repo, cfg, cwd)); err != nil {
 			return fail(err)
 		}

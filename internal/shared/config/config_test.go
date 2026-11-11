@@ -111,3 +111,30 @@ func TestLoadSkillsWarning(t *testing.T) {
 		t.Errorf("warning %q", c.Warning)
 	}
 }
+
+func TestLoadThemeDefaults(t *testing.T) {
+	th, err := LoadTheme(t.TempDir())
+	if err != nil || th != DefaultTheme() {
+		t.Fatal(th, err)
+	}
+}
+
+func TestLoadThemeOverrides(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, ".devex.conf", "[theme]\noptions_text_color = magenta\n")
+	th, err := LoadTheme(home)
+	want := DefaultTheme()
+	want.OptionsText = "magenta"
+	if err != nil || th != want {
+		t.Fatal(th, err)
+	}
+}
+
+func TestLoadThemeBadValues(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, ".devex.conf", "[theme]\nactive_border_color = blu\n")
+	th, err := LoadTheme(home)
+	if err != nil || th.ActiveBorder != "blu" {
+		t.Fatal(th, err)
+	}
+}

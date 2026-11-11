@@ -115,7 +115,7 @@ type model struct {
 
 // New builds the app; cwd is where sync, clean and rm run.
 func New(repo *gitx.Repo, cfg config.RepoConfig, cwd string) tea.Model {
-	return model{repo: repo, cfg: cfg, cwd: cwd, focus: panelWorktrees, events: make(chan tea.Msg, 256)}
+	return model{repo: repo, cfg: cfg, cwd: cwd, focus: panelWorktrees, events: make(chan tea.Msg, 256), statusMsg: themeWarning}
 }
 
 // Run shows m (from New) full-screen until the user quits, logging every git command it runs and keeping git off the terminal.
@@ -553,16 +553,16 @@ var (
 	yellow = fg("11")
 	blue   = fg("4")
 	dim    = fg("8")
-	accent = fg("5")
+	accent lipgloss.Style // the ▸ marker; SetTheme makes it the active border style
 	bold   = lipgloss.NewStyle().Bold(true)
 )
 
-// edge is the box border colour: accent marks the focused pane.
-func edge(active bool) lipgloss.Style {
-	if active {
-		return accent
+// edge is the box border colour: the active style marks the focused pane.
+func edge(on bool) lipgloss.Style {
+	if on {
+		return active
 	}
-	return dim
+	return inactive
 }
 
 func remote(r wt.Row) string {
@@ -634,5 +634,5 @@ func (m model) modal() string {
 	for i := range lines {
 		lines[i] = " " + lines[i]
 	}
-	return ui.Box("Confirm delete", lines, min(m.w-4, 72), min(len(lines)+2, m.h-2), accent)
+	return ui.Box("Confirm delete", lines, min(m.w-4, 72), min(len(lines)+2, m.h-2), active)
 }
