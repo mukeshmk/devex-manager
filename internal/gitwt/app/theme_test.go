@@ -180,3 +180,11 @@ func TestSelectedBgFromConfig(t *testing.T) {
 		t.Errorf("not magenta: %q", ls)
 	}
 }
+
+func TestPopupDimsPanelHighlight(t *testing.T) {
+	withColour(t)
+	m := press(wide(t), "?")
+	if ls := bgLines(m.View(), "44"); len(ls) != 0 {
+		t.Errorf("panel row still highlighted under popup: %q", ls)
+	}
+}

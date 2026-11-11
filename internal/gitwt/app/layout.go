@@ -124,9 +124,9 @@ func (m model) box(p panel, lines []string, r rect) string {
 	return ui.Box(title, lines, r.w, r.h, border)
 }
 
-// selStyle is how p paints its selected row: the full highlight only while p has focus.
+// selStyle is how p paints its selected row: the full highlight only while p has focus and nothing is over it.
 func (m model) selStyle(p panel) lipgloss.Style {
-	if m.focus == p && !m.focusMain {
+	if m.focus == p && !m.focusMain && m.popup == nil && m.confirm == nil {
 		return selFocused
 	}
 	return selBlurred

@@ -138,3 +138,11 @@ func TestLoadThemeBadValues(t *testing.T) {
 		t.Fatal(th, err)
 	}
 }
+
+func TestLoadThemeCaseInsensitive(t *testing.T) {
+	home := t.TempDir()
+	write(t, home, ".devex.conf", "[Theme]\nOptions_Text_Color = magenta\n")
+	if th, _ := LoadTheme(home); th.OptionsText != "magenta" {
+		t.Fatal(th)
+	}
+}

@@ -1,6 +1,9 @@
 package config
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
 
 // Theme holds the raw [theme] colour specs from ~/.devex.conf, as written (e.g. "green, bold").
 type Theme struct {
@@ -25,6 +28,14 @@ func LoadTheme(home string) (Theme, error) {
 	if err != nil {
 		return t, err
 	}
+	theme := map[string]string{} // section and key names match case-insensitively
+	for sec, kv := range ini {
+		if strings.EqualFold(sec, "theme") {
+			for k, v := range kv {
+				theme[strings.ToLower(k)] = v
+			}
+		}
+	}
 	for k, f := range map[string]*string{
 		"active_border_color":    &t.ActiveBorder,
 		"inactive_border_color":  &t.InactiveBorder,
@@ -32,7 +43,7 @@ func LoadTheme(home string) (Theme, error) {
 		"options_text_color":     &t.OptionsText,
 		"selected_line_bg_color": &t.SelectedLineBg,
 	} {
-		if v := ini["theme"][k]; v != "" {
+		if v := theme[k]; v != "" {
 			*f = v
 		}
 	}
