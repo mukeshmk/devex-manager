@@ -25,13 +25,13 @@ func Add(e Env, branch, folder string) error {
 	return nil
 }
 
-// RemoteBranches lists origin branches that have no worktree yet, sorted.
+// RemoteBranches lists origin branches that have no worktree yet, most recently committed first.
 func RemoteBranches(cwd string) ([]string, error) {
 	repo, err := gitx.Open(cwd)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := gitx.Run(repo.CommonDir, "branch", "-r")
+	raw, err := gitx.Run(repo.CommonDir, "branch", "-r", "--sort=-committerdate")
 	if err != nil {
 		return nil, err
 	}

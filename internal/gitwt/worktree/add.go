@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/mukeshmk/devex-manager/internal/shared/config"
@@ -88,7 +87,7 @@ func Add(repo *gitx.Repo, cfg config.RepoConfig, branch, customFolder string, ou
 	return path, nil
 }
 
-// RemoteBranchChoices turns `git branch -r` output into origin branch names that have no worktree.
+// RemoteBranchChoices turns `git branch -r` output into origin branch names that have no worktree, keeping git's order.
 func RemoteBranchChoices(raw string, wts []gitx.Worktree) []string {
 	active := map[string]bool{}
 	for _, w := range wts {
@@ -107,7 +106,6 @@ func RemoteBranchChoices(raw string, wts []gitx.Worktree) []string {
 			res = append(res, b)
 		}
 	}
-	sort.Strings(res)
 	return res
 }
 

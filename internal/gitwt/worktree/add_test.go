@@ -125,7 +125,7 @@ func TestAddCustomRequiresFolder(t *testing.T) {
 func TestRemoteBranchChoices(t *testing.T) {
 	raw := "  origin/HEAD -> origin/main\n  origin/main\n  origin/feat/a\n  origin/b\n  origin/b\n"
 	got := RemoteBranchChoices(raw, []gitx.Worktree{{Branch: "main"}})
-	if strings.Join(got, ",") != "b,feat/a" {
+	if strings.Join(got, ",") != "feat/a,b" {
 		t.Fatal(got)
 	}
 }
