@@ -42,5 +42,5 @@ func runRm(out, errw io.Writer, args []string, force bool) error {
 	if err != nil {
 		return err
 	}
-	return exit1(flows.Remove(e, args[0], force))
+	return exit1(flows.Remove(e, args[0], force, flows.DirtyRefuse))
 }

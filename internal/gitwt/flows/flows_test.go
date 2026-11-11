@@ -118,7 +118,7 @@ func TestRemoveFlowRefusesDirty(t *testing.T) {
 	d := f.AddWorktree(t, "dirty", "dirty")
 	write(t, filepath.Join(d, "x.txt"), "unsaved")
 	e, b := env(filepath.Join(f.Root, "main"), &script{})
-	err := Remove(e, "dirty", false)
+	err := Remove(e, "dirty", false, DirtyRefuse)
 	if !errors.Is(err, ErrReported) || !strings.Contains(b.String(), "Uncommitted changes") {
 		t.Fatalf("err=%v out=%s", err, b)
 	}
@@ -222,5 +222,86 @@ func TestFetchFlowHeadlineIsGitError(t *testing.T) {
 	first, _, _ := strings.Cut(errb.String(), "\n")
 	if !strings.HasPrefix(first, "fatal:") && !strings.HasPrefix(first, "error:") {
 		t.Fatalf("headline %q in:\n%s", first, errb)
+	}
+}
+
+func TestRemoveFlowStashesDirty(t *testing.T) {
+	f := testutil.NewRepo(t)
+	d := f.AddWorktree(t, "dirty", "dirty")
+	write(t, filepath.Join(d, "a.txt"), "staged")
+	gitx.Run(d, "add", "a.txt")
+	write(t, filepath.Join(d, "x.txt"), "unsaved")
+	e, b := env(filepath.Join(f.Root, "main"), &script{})
+	if err := Remove(e, "dirty", false, DirtyStash); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if _, err := os.Stat(d); !os.IsNotExist(err) {
+		t.Fatal("worktree not removed")
+	}
+	git := filepath.Join(f.Root, "main") // stash needs a work tree; the stash itself is shared
+	if l, _ := gitx.Run(git, "stash", "list"); !strings.Contains(l, "dirty") {
+		t.Fatalf("no stash for dirty: %q", l)
+	}
+	if s, err := gitx.Run(git, "show", "stash@{0}^3:x.txt"); err != nil || s != "unsaved" {
+		t.Fatalf("untracked file not stashed: %q %v", s, err)
+	}
+	if s, _ := gitx.Run(git, "show", "stash@{0}:a.txt"); s != "staged" {
+		t.Fatalf("tracked change not stashed: %q", s)
+	}
+}
+
+func TestRemoveFlowDiscardsDirty(t *testing.T) {
+	f := testutil.NewRepo(t)
+	d := f.AddWorktree(t, "dirty", "dirty")
+	write(t, filepath.Join(d, "x.txt"), "unsaved")
+	e, b := env(filepath.Join(f.Root, "main"), &script{})
+	if err := Remove(e, "dirty", false, DirtyDiscard); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if _, err := os.Stat(d); !os.IsNotExist(err) {
+		t.Fatal("worktree not removed")
+	}
+	if l, _ := gitx.Run(filepath.Join(f.Root, "main"), "stash", "list"); l != "" {
+		t.Fatalf("discard stashed: %q", l)
+	}
+}
+
+func TestRemoveFlowStashStillRefusesUnpushed(t *testing.T) {
+	f := testutil.NewRepo(t)
+	d := f.AddWorktree(t, "dirty", "dirty")
+	write(t, filepath.Join(d, "c.txt"), "c")
+	gitx.Run(d, "add", "c.txt")
+	gitx.Run(d, "commit", "-qm", "local only")
+	write(t, filepath.Join(d, "x.txt"), "unsaved")
+	for _, how := range []Dirty{DirtyStash, DirtyDiscard} {
+		e, b := env(filepath.Join(f.Root, "main"), &script{})
+		if err := Remove(e, "dirty", false, how); !errors.Is(err, ErrReported) || !strings.Contains(b.String(), "not on any remote") {
+			t.Fatalf("%v: err=%v out=%s", how, err, b)
+		}
+		if _, err := os.Stat(filepath.Join(d, "x.txt")); err != nil {
+			t.Fatalf("%v: work lost", how)
+		}
+	}
+	if l, _ := gitx.Run(filepath.Join(f.Root, "main"), "stash", "list"); l != "" {
+		t.Fatalf("stashed despite refusal: %q", l)
+	}
+}
+
+func TestRemoveFlowStashSkipsCopyPaths(t *testing.T) {
+	f := testutil.NewRepo(t)
+	main := filepath.Join(f.Root, "main")
+	d := f.AddWorktree(t, "dirty", "dirty")
+	write(t, filepath.Join(f.Root, ".devex.conf"), "[copies]\npaths = .vscode\n")
+	write(t, filepath.Join(main, ".vscode", "a.json"), "same")
+	e, b := env(main, &script{})
+	if err := Sync(e, SyncOpts{Yes: true}); err != nil { // copies .vscode into dirty
+		t.Fatalf("%v\n%s", err, b)
+	}
+	write(t, filepath.Join(d, "x.txt"), "unsaved")
+	if err := Remove(e, "dirty", false, DirtyStash); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if files, _ := gitx.Run(main, "show", "--name-only", "--format=", "stash@{0}^3"); files != "x.txt" {
+		t.Fatalf("stash holds %q, want only x.txt", files)
 	}
 }

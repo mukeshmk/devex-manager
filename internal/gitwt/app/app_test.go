@@ -141,14 +141,14 @@ func TestAppDeleteShowsConfirm(t *testing.T) {
 	os.WriteFile(dirty, []byte("x"), 0o644)
 	m = press(m, "r", "/", "DEVX-2", "enter", "d")
 	v := m.View()
-	for _, w := range []string{"dirty.txt", "run git wt rm -f DEVX-2 in a shell to override", "n/esc close"} {
+	for _, w := range []string{"dirty.txt", "s stash, then delete", "x discard, then delete", "n/esc cancel"} {
 		if !strings.Contains(v, w) {
 			t.Errorf("unsafe modal missing %q:\n%s", w, v)
 		}
 	}
 	checkWidth(t, v, 100, 30)
 	m = press(m, "y") // unsafe: y does nothing, modal stays
-	if m.(model).busy != "" || !strings.Contains(m.View(), "n/esc close") {
+	if m.(model).busy != "" || !strings.Contains(m.View(), "n/esc cancel") {
 		t.Errorf("y on unsafe started %q\n%s", m.(model).busy, m.View())
 	}
 	m = press(m, "esc")
@@ -208,4 +208,50 @@ func TestAppFilterPasteDropsControls(t *testing.T) {
 		t.Fatalf("filter=%q", f)
 	}
 	checkWidth(t, m.View(), 100, 30)
+}
+
+func TestAppDeleteStashes(t *testing.T) {
+	f, m := start(t)
+	d := filepath.Join(f.Root, "DEVX-2")
+	os.WriteFile(filepath.Join(d, "dirty.txt"), []byte("x"), 0o644)
+	m = drain(t, press(m, "r", "/", "DEVX-2", "enter", "d", "s"), 100)
+	if exists(d) {
+		t.Fatalf("not deleted; status %q", m.(model).statusMsg)
+	}
+	if l, _ := gitx.Run(filepath.Join(f.Root, "main"), "stash", "list"); !strings.Contains(l, "DEVX-2") {
+		t.Errorf("no stash: %q", l)
+	}
+}
+
+func TestAppDeleteDiscardAsksAgain(t *testing.T) {
+	f, m := start(t)
+	d := filepath.Join(f.Root, "DEVX-2")
+	os.WriteFile(filepath.Join(d, "dirty.txt"), []byte("x"), 0o644)
+	m = press(m, "r", "/", "DEVX-2", "enter", "d", "x")
+	if v := m.View(); !strings.Contains(v, "can't be undone") || m.(model).busy != "" {
+		t.Fatalf("no second confirm:\n%s", v)
+	}
+	if m = press(m, "n"); m.(model).confirm != nil || !exists(d) {
+		t.Fatal("n did not cancel")
+	}
+	m = drain(t, press(m, "d", "x", "y"), 100)
+	if exists(d) {
+		t.Fatalf("not deleted; status %q", m.(model).statusMsg)
+	}
+	if l, _ := gitx.Run(filepath.Join(f.Root, "main"), "stash", "list"); l != "" {
+		t.Errorf("discard stashed: %q", l)
+	}
+}
+
+// Unpushed commits are never deletable in the app: no stash or discard, just the shell hint.
+func TestModalUnpushedOffersNoOverride(t *testing.T) {
+	m := model{w: 100, h: 30, confirm: &confirm{folder: "x", path: "/r/x",
+		safety: wt.Safety{Unpushed: 1, Uncommitted: []string{"?? a"}}}}
+	v := m.modal()
+	if !strings.Contains(v, "run git wt rm -f x in a shell to override") || strings.Contains(v, "stash") || strings.Contains(v, "discard") {
+		t.Errorf("modal:\n%s", v)
+	}
+	if mm := press(m, "s", "x"); mm.(model).busy != "" {
+		t.Errorf("override started %q", mm.(model).busy)
+	}
 }

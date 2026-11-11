@@ -2,7 +2,9 @@ package flows
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/mukeshmk/devex-manager/internal/gitwt/sync"
@@ -11,8 +13,18 @@ import (
 	"github.com/mukeshmk/devex-manager/internal/shared/gitx"
 )
 
+// Dirty is what Remove does with uncommitted changes when they are the only work at risk.
+// Commits that are on no remote always refuse unless force.
+type Dirty int
+
+const (
+	DirtyRefuse  Dirty = iota // refuse, as git wt rm does
+	DirtyStash                // stash them, untracked files included, then remove
+	DirtyDiscard              // throw them away with the worktree
+)
+
 // Remove runs git wt rm for one target. Every failure is printed to e.Err and returned as ErrReported.
-func Remove(e Env, target string, force bool) error {
+func Remove(e Env, target string, force bool, dirty Dirty) error {
 	out, errw := e.Out, e.Err
 	co, ce := colours(out), colours(errw)
 	fail := func(lines ...string) error {
@@ -62,6 +74,7 @@ func Remove(e Env, target string, force bool) error {
 		return fail(fmt.Sprintf("Error: Refusing to delete the base branch '%s'.", branch))
 	}
 
+	stash := false
 	if !force {
 		if len(cfg.CopyPaths) > 0 {
 			s, err := wtsync.Session(repo, cfg)
@@ -77,14 +90,25 @@ func Remove(e Env, target string, force bool) error {
 		if w != nil {
 			subject = *w
 		}
-		if err := refuseUnsafe(repo, cfg, subject, branch, fail); err != nil {
+		var err error
+		if stash, err = refuseUnsafe(repo, cfg, subject, branch, fail, dirty); err != nil {
 			return err
 		}
 		// A detached worktree's HEAD says nothing about the same-named branch Remove also deletes.
 		if w != nil && w.Branch == "" && wt.BranchExists(repo, branch) {
-			if err := refuseUnsafe(repo, cfg, gitx.Worktree{Branch: branch}, branch, fail); err != nil {
+			if _, err := refuseUnsafe(repo, cfg, gitx.Worktree{Branch: branch}, branch, fail, DirtyRefuse); err != nil {
 				return err
 			}
+		}
+	}
+
+	if stash {
+		if err := stashChanges(*w, branch, cfg, out); err != nil {
+			return fail(err.Error())
+		}
+		// Anything the stash left behind would go with the folder: refuse, keeping the stash.
+		if _, err := refuseUnsafe(repo, cfg, *w, branch, fail, DirtyRefuse); err != nil {
+			return err
 		}
 	}
 
@@ -102,15 +126,31 @@ func Remove(e Env, target string, force bool) error {
 	return nil
 }
 
-// refuseUnsafe lists what would be lost when the worktree or branch is not Safe.
-func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree, branch string, fail func(...string) error) error {
+// stashChanges stashes w's changes, untracked files included, leaving out the copy and symlink
+// paths that add and sync put there, so the stash holds only the user's own work.
+func stashChanges(w gitx.Worktree, branch string, cfg config.RepoConfig, out io.Writer) error {
+	fmt.Fprintf(out, "Stashing uncommitted changes of %s...\n", filepath.Base(w.Path))
+	args := []string{"stash", "push", "--include-untracked", "-m", fmt.Sprintf("git wt rm: %s (%s)", filepath.Base(w.Path), branch), "--", "."}
+	for _, p := range append(slices.Clone(cfg.CopyPaths), cfg.SymlinkPaths...) {
+		args = append(args, ":(exclude)"+p)
+	}
+	_, err := gitx.Run(w.Path, args...)
+	return err
+}
+
+// refuseUnsafe lists what would be lost when the worktree or branch is not Safe. With dirty set and
+// uncommitted changes the only risk, it lets the removal go on; stash reports that they need stashing.
+func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree, branch string, fail func(...string) error, dirty Dirty) (stash bool, err error) {
 	merged, _ := repo.MergedBranches(cfg.BaseBranch) // unknown base: treat nothing as merged
 	s, err := wt.Assess(repo, cfg, subject, merged, wt.RemoteHeads(repo, branch))
 	if err != nil {
-		return fail(err.Error())
+		return false, fail(err.Error())
 	}
 	if s.Safe() {
-		return nil
+		return false, nil
+	}
+	if dirty != DirtyRefuse && s.LostCommits() == 0 {
+		return dirty == DirtyStash && subject.Path != "", nil
 	}
 	lines := []string{fmt.Sprintf("Error: Refusing to remove '%s': it has work that would be lost.", branch)}
 	if n := len(s.Uncommitted); n > 0 {
@@ -125,5 +165,5 @@ func refuseUnsafe(repo *gitx.Repo, cfg config.RepoConfig, subject gitx.Worktree,
 	if n := s.LostCommits(); n > 0 {
 		lines = append(lines, fmt.Sprintf("%d commit(s) not on any remote", n))
 	}
-	return fail(append(lines, "Hint: use --force to remove anyway")...)
+	return false, fail(append(lines, "Hint: use --force to remove anyway")...)
 }

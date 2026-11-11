@@ -80,10 +80,11 @@ type (
 )
 
 type confirm struct {
-	folder string
-	path   string // what rm is given: a folder name can also be some other worktree's branch
-	safety wt.Safety
-	refuse string // non-empty: git wt rm would refuse this outright, so the modal only offers close
+	folder  string
+	path    string // what rm is given: a folder name can also be some other worktree's branch
+	safety  wt.Safety
+	refuse  string // non-empty: git wt rm would refuse this outright, so the modal only offers close
+	discard bool   // the "discard, then delete" second confirm is showing
 }
 
 type model struct {
@@ -326,13 +327,26 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.confirm != nil {
 		switch k {
-		case "y":
-			if !m.confirm.canDelete() {
+		case "y", "s":
+			c := m.confirm
+			dirty := flows.DirtyRefuse
+			switch {
+			case k == "y" && c.discard:
+				dirty = flows.DirtyDiscard
+			case k == "s" && c.canOverride() && !c.discard:
+				dirty = flows.DirtyStash
+			case k == "y" && c.canDelete():
+			default:
 				return m, nil
 			}
-			p := m.confirm.path
 			m.confirm = nil
-			return m.flow("delete", func(e flows.Env) error { return flows.Remove(e, p, false) })
+			return m.flow("delete", func(e flows.Env) error { return flows.Remove(e, c.path, false, dirty) })
+		case "x":
+			if m.confirm.canOverride() {
+				c := *m.confirm
+				c.discard = true
+				m.confirm = &c
+			}
 		case "n", "esc":
 			m.confirm = nil
 		}
@@ -593,9 +607,20 @@ func changes(r wt.Row) string {
 
 func (c confirm) canDelete() bool { return c.refuse == "" && c.safety.Safe() }
 
+// canOverride: uncommitted changes are the only risk, so the app may stash or discard them and delete.
+// Commits on no remote never qualify; those stay a shell-only git wt rm -f.
+func (c confirm) canOverride() bool {
+	return c.refuse == "" && !c.safety.Safe() && c.safety.LostCommits() == 0
+}
+
 func (m model) modal() string {
 	c := m.confirm
 	s := c.safety
+	if c.discard {
+		lines := []string{" " + bold.Render(fmt.Sprintf("Discard %d uncommitted file(s) in %s and delete it?", len(s.Uncommitted), c.folder)),
+			" " + red.Render("This can't be undone."), "", " y discard and delete · n/esc cancel"}
+		return ui.Box("Confirm discard", lines, min(m.w-4, 72), min(len(lines)+2, m.h-2), active)
+	}
 	lost := s.LostCommits()
 	var tail []string
 	switch {
@@ -610,12 +635,15 @@ func (m model) modal() string {
 	if n := s.GoneCommits(); n > 0 {
 		tail = append(tail, yellow.Render(fmt.Sprintf("%d local commit(s) not on any remote (upstream gone)", n)))
 	}
-	if c.refuse == "" && !s.Safe() {
+	if c.refuse == "" && !s.Safe() && !c.canOverride() {
 		tail = append(tail, "", yellow.Render("run git wt rm -f "+c.folder+" in a shell to override"))
 	}
-	if c.canDelete() {
+	switch {
+	case c.canDelete():
 		tail = append(tail, "", "y confirm · n cancel")
-	} else {
+	case c.canOverride():
+		tail = append(tail, "", "s stash, then delete · x discard, then delete", "n/esc cancel")
+	default:
 		tail = append(tail, "", "n/esc close")
 	}
 	lines := []string{bold.Render("Delete worktree " + c.folder + " and its branch?"), ""}
