@@ -187,9 +187,27 @@ Context panel (that branch's `dx ctx` todos):
 
 Sync, clean and delete run inside the app: questions and confirmations appear as popups over the main view (the panels and command log stay visible, so the plan an action prints is on screen while you answer), and each one calls the same code as `git wt sync`, `git wt clean` and `git wt rm`, with the same safety checks. In-app delete never uses `--force`. While an action runs, `q` and `ctrl+c` do not quit; the status line shows `wait for <action> to finish`. `ctrl+c` in a flow question cancels the whole action (for sync, before anything changes). `esc` depends on the question: a choose question takes its default, a confirm means no, a checklist ticks nothing, and an input cancels. In the new-worktree list, `esc` first clears the filter, then closes the list.
 
-`n` lists origin branches that have no worktree yet; picking one runs the same code as `git wt add <branch>`, and `+ new branch…` asks for a name and creates it from the base branch (with `naming_strategy = custom`, a second popup asks for the folder name). The new worktree is selected when it is ready. `f` fetches so new remote branches show up in `n`. Git never asks for a password or passphrase inside the app: if fetch needs one, it fails with git's message in the status line.
+`n` lists origin branches that have no worktree yet, most recently committed first; picking one runs the same code as `git wt add <branch>`, and `+ new branch…` asks for a name and creates it from the base branch (with `naming_strategy = custom`, a second popup asks for the folder name). The new worktree is selected when it is ready. `f` fetches so new remote branches show up in `n`. Git never asks for a password or passphrase inside the app: if fetch needs one, it fails with git's message in the status line.
 
 The command log lists every git command the tool runs plus each action's output. It keeps the last 500 lines and scrolls when focused (`5`).
+
+#### Colours
+
+The `git wt` app uses lazygit's default colours: a green bold border on the focused panel, blue key hints, a cyan border while filtering, green popup borders and a blue highlight across the selected row. Change them in `~/.devex.conf` (not the repo's `.devex.conf`):
+
+```ini
+[theme]
+# Colours for the git wt app. Same names and defaults as lazygit's gui.theme.
+# A value is a comma-separated list: one colour and any of bold, underline, reverse.
+# Colours: default, black, red, green, yellow, blue, magenta, cyan, white, 0-255, or #rrggbb.
+active_border_color = green, bold
+inactive_border_color = default
+searching_border_color = cyan, bold
+options_text_color = blue
+selected_line_bg_color = blue
+```
+
+A value the app can't read falls back to its default, and the status line shows a warning until the first key press.
 
 **`dx skills`** (no subcommand): grid of skills (rows) by master and each tool (columns), with a diff of the selected skill alongside.
 

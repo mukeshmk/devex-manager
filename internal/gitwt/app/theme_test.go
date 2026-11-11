@@ -1,6 +1,7 @@
 package wtapp
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -133,5 +134,49 @@ func TestThemeWarningInStatus(t *testing.T) {
 	SetTheme(th)
 	if m := New(nil, config.RepoConfig{}, "").(model); !strings.Contains(m.statusMsg, "theme: unknown colour") {
 		t.Errorf("status %q", m.statusMsg)
+	}
+}
+
+// bgLines returns the lines of v that set background SGR code (e.g. "44").
+func bgLines(v, code string) []string {
+	re := regexp.MustCompile(`\x1b\[([0-9;]*;)?` + code + `(;[0-9;]*)?m`)
+	var out []string
+	for _, l := range strings.Split(v, "\n") {
+		if re.MatchString(l) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+func TestSelectedRowHighlightFollowsFocus(t *testing.T) {
+	withColour(t)
+	f, m := start(t)
+	ctxFile(t, f, "- [ ] one\n")
+	m = press(resize(m, 120, 40), "/", "DEVX-2", "enter")
+	if ls := bgLines(m.View(), "44"); len(ls) != 1 || !strings.Contains(ls[0], "DEVX-2") {
+		t.Errorf("want only the worktree row highlighted: %q", ls)
+	}
+	m = press(m, "3")
+	if ls := bgLines(m.View(), "44"); len(ls) != 1 || !strings.Contains(ls[0], "one") {
+		t.Errorf("want only the todo row highlighted: %q", ls)
+	}
+}
+
+func TestPopupCursorHighlighted(t *testing.T) {
+	withColour(t)
+	if ls := bgLines(filterPopup("a", "b", "c").view(60, 12), "44"); len(ls) != 1 {
+		t.Errorf("%d highlighted rows: %q", len(ls), ls)
+	}
+}
+
+func TestSelectedBgFromConfig(t *testing.T) {
+	withColour(t)
+	th := config.DefaultTheme()
+	th.SelectedLineBg = "magenta"
+	SetTheme(th)
+	m := press(wide(t), "/", "DEVX-2", "enter")
+	if ls := bgLines(m.View(), "45"); len(ls) != 1 {
+		t.Errorf("not magenta: %q", ls)
 	}
 }

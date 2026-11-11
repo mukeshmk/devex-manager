@@ -192,6 +192,7 @@ func (p popup) view(maxW, maxH int) string {
 	case popupChoose:
 		box = "Choose"
 	}
+	cur := -1 // the cursor row's line, highlighted once the box width is known
 	if p.kind == popupChoose || p.kind == popupChecklist {
 		idx := make([]int, len(p.options))
 		for i := range idx {
@@ -218,7 +219,7 @@ func (p popup) view(maxW, maxH int) string {
 				}
 			}
 			if j == p.cursor {
-				mark = "▸ "
+				mark, cur = "▸ ", len(lines)
 			}
 			lines = append(lines, mark+row)
 		}
@@ -233,6 +234,9 @@ func (p popup) view(maxW, maxH int) string {
 		longest = max(longest, lipgloss.Width(l))
 	}
 	w := min(maxW-4, max(40, longest+4))
+	if cur >= 0 {
+		lines[cur] = ui.Highlight(lines[cur], w-2, selFocused)
+	}
 	return ui.Box(box, lines, w, len(lines)+2, active)
 }
 

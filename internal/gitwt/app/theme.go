@@ -14,6 +14,8 @@ import (
 // Themed styles, set by SetTheme; init applies lazygit's defaults.
 var (
 	active, inactive, searching, hintStyle lipgloss.Style
+	selFocused                             lipgloss.Style // selected row in the focused panel or a popup
+	selBlurred                             = lipgloss.NewStyle().Bold(true)
 	themeWarning                           string // shown in the status line when the app opens
 )
 
@@ -75,6 +77,7 @@ func SetTheme(t config.Theme) (warning string) {
 	inactive = parse("inactive_border_color", t.InactiveBorder, d.InactiveBorder, false)
 	searching = parse("searching_border_color", t.SearchingBorder, d.SearchingBorder, false)
 	hintStyle = parse("options_text_color", t.OptionsText, d.OptionsText, false)
+	selFocused = parse("selected_line_bg_color", t.SelectedLineBg, d.SelectedLineBg, true).Bold(true)
 	accent = active
 	themeWarning = warning
 	return warning

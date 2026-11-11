@@ -124,6 +124,14 @@ func (m model) box(p panel, lines []string, r rect) string {
 	return ui.Box(title, lines, r.w, r.h, border)
 }
 
+// selStyle is how p paints its selected row: the full highlight only while p has focus.
+func (m model) selStyle(p panel) lipgloss.Style {
+	if m.focus == p && !m.focusMain {
+		return selFocused
+	}
+	return selBlurred
+}
+
 // clean makes free text safe to measure: tabs and carriage returns would move the cursor unseen.
 var clean = strings.NewReplacer("\t", "    ", "\r", "").Replace
 
@@ -154,7 +162,11 @@ func (m model) panelLines(p panel, w, h int) []string {
 			if m.focus == panelContext && i == m.todoSel {
 				mark = accent.Render("▸ ")
 			}
-			out = append(out, mark+box+" "+clean(t.Text))
+			row := mark + box + " " + clean(t.Text)
+			if i == m.todoSel {
+				row = ui.Highlight(row, w, m.selStyle(panelContext))
+			}
+			out = append(out, row)
 		}
 		return out[max(m.todoSel-h+1, 0):]
 	case panelSync:
@@ -326,7 +338,11 @@ func (m model) listLines(w, h int) []string {
 		if r.Merged {
 			mg = yellow.Render("merged")
 		}
-		out = append(out, mark+name+" "+ui.Fit(changes(r), 7)+" "+ui.Fit(remote(r), 11)+" "+mg)
+		row := mark + name + " " + ui.Fit(changes(r), 7) + " " + ui.Fit(remote(r), 11) + " " + mg
+		if i == m.sel {
+			row = ui.Highlight(row, w, m.selStyle(panelWorktrees))
+		}
+		out = append(out, row)
 	}
 	return out
 }

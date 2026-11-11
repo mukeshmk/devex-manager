@@ -32,3 +32,15 @@ func Box(title string, lines []string, w, h int, border lipgloss.Style) string {
 	}
 	return strings.Join(append(out, border.Render("╰"+strings.Repeat("─", in)+"╯")), "\n")
 }
+
+// Highlight fits s to exactly w cells and paints the whole row in st, reopening st after each reset inside s
+// so a background runs to the end of the row while inner colours survive.
+func Highlight(s string, w int, st lipgloss.Style) string {
+	s = Fit(s, w)
+	open, _, _ := strings.Cut(st.Render("x"), "x")
+	if open == "" { // empty style or no-colour terminal
+		return s
+	}
+	s = strings.NewReplacer("\x1b[0m", "\x1b[0m"+open, "\x1b[m", "\x1b[m"+open).Replace(s)
+	return open + s + "\x1b[0m"
+}
