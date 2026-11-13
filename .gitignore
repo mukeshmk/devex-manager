@@ -22,10 +22,14 @@ ANTIGRAVITY.md
 
 # Claude
 .claude
-CLAUDE.md
 
-# Tests
-tests/
+# Tests (only the auto-venv prompt test is tracked)
 
 # Brainstorm mockups
 .superpowers/
+
+# Go build output
+/dist/
+
+# Superpowers specs/plans (local only)
+docs/superpowers/

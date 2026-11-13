@@ -11,9 +11,6 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/.local/bin"
 WT_TOOLS_DIR="$INSTALL_DIR/git-wt-tools"
-CTX_TOOLS_DIR="$INSTALL_DIR/dx-ctx-tools"
-DX_SKILLS_TOOLS_DIR="$INSTALL_DIR/dx-skills-tools"
-DX_NB_TOOLS_DIR="$INSTALL_DIR/dx-nb-tools"
 REPO_RAW_URL="https://raw.githubusercontent.com/mukeshmk/devex-manager/main"
 
 # Detect if we are running from a local clone or remotely via curl
@@ -32,66 +29,43 @@ fi
 # 1. Remove installed files
 echo -e "\n${YELLOW}Removing installed files...${NC}"
 
-if [ -f "$INSTALL_DIR/git-wt" ]; then
+if [ -e "$INSTALL_DIR/git-wt" ] || [ -L "$INSTALL_DIR/git-wt" ]; then
     rm "$INSTALL_DIR/git-wt"
-    echo "  ✓ Removed git-wt router"
+    echo "  ✓ Removed git-wt"
 else
-    echo "  - git-wt router not found"
-fi
-
-
-
-if [ -f "$INSTALL_DIR/git-ctx" ]; then
-    rm "$INSTALL_DIR/git-ctx"
-    echo "  ✓ Removed legacy git-ctx script"
+    echo "  - git-wt not found"
 fi
 
 if [ -f "$INSTALL_DIR/dx" ]; then
     rm "$INSTALL_DIR/dx"
-    echo "  ✓ Removed dx router"
+    echo "  ✓ Removed dx binary"
 else
-    echo "  - dx router not found"
+    echo "  - dx binary not found"
 fi
 
 if [ -d "$WT_TOOLS_DIR" ]; then
-    rm -rf "$WT_TOOLS_DIR"
+    rm -rf "${WT_TOOLS_DIR:?}"
     echo "  ✓ Removed git-wt-tools directory"
 else
     echo "  - git-wt-tools directory not found"
 fi
 
-
-
-if [ -d "$CTX_TOOLS_DIR" ]; then
-    rm -rf "$CTX_TOOLS_DIR"
-    echo "  ✓ Removed dx-ctx-tools directory"
+if [ -d "$HOME/.claude/skills/git-wt" ]; then
+    rm -rf "${HOME:?}/.claude/skills/git-wt"
+    echo "  ✓ Removed git-wt agent skill"
 else
-    echo "  - dx-ctx-tools directory not found"
-fi
-
-if [ -d "$DX_SKILLS_TOOLS_DIR" ]; then
-    rm -rf "$DX_SKILLS_TOOLS_DIR"
-    echo "  ✓ Removed dx-skills-tools directory"
-else
-    echo "  - dx-skills-tools directory not found"
-fi
-
-if [ -d "$DX_NB_TOOLS_DIR" ]; then
-    rm -rf "$DX_NB_TOOLS_DIR"
-    echo "  ✓ Removed dx-nb-tools directory"
-else
-    echo "  - dx-nb-tools directory not found"
+    echo "  - git-wt agent skill not found"
 fi
 
 # 2. Remove Git aliases
 echo -e "\n${YELLOW}Would you like to remove the Git aliases installed by DevEx Manager?${NC}"
-read -p "(y/n) " -n 1 -r
+read -p "(y/n) " -n 1 -r || REPLY=n
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     if [ "$IS_REMOTE" = true ]; then
-        curl -fsSL "$REPO_RAW_URL/git-aliases/uninstall-git-aliases.sh" | bash
+        curl -fsSL "$REPO_RAW_URL/shell/git-aliases/uninstall.sh" | bash
     else
-        bash "$SCRIPT_DIR/git-aliases/uninstall-git-aliases.sh"
+        bash "$SCRIPT_DIR/shell/git-aliases/uninstall.sh"
     fi
 else
     echo "Skipping Git aliases removal."
