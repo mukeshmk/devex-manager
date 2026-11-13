@@ -30,3 +30,6 @@ ANTIGRAVITY.md
 
 # Go build output
 /dist/
+
+# Superpowers specs/plans (local only)
+docs/superpowers/
